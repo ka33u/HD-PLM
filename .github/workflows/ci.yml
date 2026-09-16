@@ -1,0 +1,52 @@
+name: Independent NPI checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build-and-first-paint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke
+  api-regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: npi_workspace_test
+          POSTGRES_USER: npi
+          POSTGRES_PASSWORD: test-only-password
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://npi:test-only-password@localhost:5432/npi_workspace_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:http
+      - run: npm run test:auth
+      - run: npm run test:setup
+      - run: npm run test:files
+      - run: npm run test:migration
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:accounts-browser
+      - run: npm run test:setup-browser
