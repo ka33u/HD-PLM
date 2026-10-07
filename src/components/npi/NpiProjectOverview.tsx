@@ -124,6 +124,7 @@ export function NpiProjectOverview({
             {[
               ['项目编号', project.code],
               ['电机型号', project.motorModel],
+              ['电机编码', project.profile.motorCode || '未填写'],
               ['客户', project.profile.customer || '未填写'],
               ['用途 / 应用场景', project.profile.application || '未填写'],
               [

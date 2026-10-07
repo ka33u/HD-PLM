@@ -372,7 +372,14 @@ export function bomTree<T extends BomRow>(rows: Array<T>) {
   return roots
 }
 export interface BomDifference {
-  type: 'ADDED' | 'REMOVED' | 'QTY_CHANGED' | 'MOVED' | 'UNCHANGED'
+  type:
+    | 'ADDED'
+    | 'REMOVED'
+    | 'QTY_CHANGED'
+    | 'MOVED'
+    | 'FIELDS_CHANGED'
+    | 'CODE_CHANGED'
+    | 'UNCHANGED'
   before: BomRow | null
   after: BomRow | null
   beforePath: string | null
@@ -419,6 +426,7 @@ export function bomDiff(
       const grouped = new Map<string, Array<BomRow>>()
       for (const r of rows.values()) {
         const key = keyOf(r, side)
+        if (!key) continue
         grouped.set(key, [...(grouped.get(key) || []), r])
       }
       return grouped
@@ -439,6 +447,16 @@ export function bomDiff(
     (r, side) => (side === 'old' ? oldLocations : nextLocations).get(r.id)!.key,
   )
   pairUnique((r) => r.materialCode)
+  // A changed code can only be suggested at one unique, non-empty ERP line
+  // under the same parent path. This does not transfer tracking or promises.
+  pairUnique((r, side) => {
+    if (!r.lineNo) return ''
+    const locations = side === 'old' ? oldLocations : nextLocations
+    return JSON.stringify([
+      r.parentId ? locations.get(r.parentId)!.key : '',
+      r.lineNo,
+    ])
+  })
   const result: Array<BomDifference> = after.map((row) => {
     const old = matches.get(row.id) ?? null
     const moved =
@@ -450,11 +468,26 @@ export function bomDiff(
     return {
       type: !old
         ? 'ADDED'
-        : moved
-          ? 'MOVED'
-          : quantityChanged
-            ? 'QTY_CHANGED'
-            : 'UNCHANGED',
+        : old.materialCode !== row.materialCode
+          ? 'CODE_CHANGED'
+          : moved
+            ? 'MOVED'
+            : quantityChanged
+              ? 'QTY_CHANGED'
+              : (
+                    [
+                      'materialName',
+                      'specification',
+                      'unit',
+                      'supplyType',
+                      'warehouse',
+                      'issueDepartment',
+                      'effectiveDate',
+                      'remark',
+                    ] as const
+                  ).some((key) => old[key] !== row[key])
+                ? 'FIELDS_CHANGED'
+                : 'UNCHANGED',
       before: old,
       after: row,
       beforePath: old ? oldLocations.get(old.id)!.label : null,

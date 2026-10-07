@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { requestId as createRequestId } from '../../lib/request-id'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   MAX_NPI_FILE_BYTES,
@@ -59,7 +60,7 @@ export function NpiFiles({
     },
     [],
   )
-  const requestId = useRef(crypto.randomUUID())
+  const requestId = useRef(createRequestId())
   const loadRevision = useRef(0)
   const path = `/files/${scope.kind}/${scope.id}`
   const reload = useCallback(async () => {
@@ -105,7 +106,7 @@ export function NpiFiles({
     try {
       await api(path, 'POST', input)
       if (!isCurrent(token)) return
-      requestId.current = crypto.randomUUID()
+      requestId.current = createRequestId()
       form.reset()
       setMessage('资料已上传成功，无需重复上传。')
       await reload()
@@ -162,7 +163,7 @@ export function NpiFiles({
           <fieldset
             disabled={blocked}
             onChange={() => {
-              requestId.current = crypto.randomUUID()
+              requestId.current = createRequestId()
             }}
           >
             <label>

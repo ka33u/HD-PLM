@@ -65,6 +65,7 @@ const contexts: Array<BrowserContext> = []
 const errors: Array<string> = []
 let failed = false
 const name = `换版浏览器验证-${Date.now()}`
+const projectButton = (name: string) => new RegExp('(?:^| · )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')
 async function pageFor(role: string, mobile = false) {
   const ctx = await browser.newContext({
     viewport: mobile
@@ -257,7 +258,7 @@ try {
   await tech.getByLabel('要求齐套日期', { exact: true }).fill('2026-10-15')
   await tech.getByLabel('样机要求日期', { exact: true }).fill('2026-10-20')
   await saved(tech)
-  await tech.getByRole('button', { name, exact: true }).click()
+  await tech.getByRole('button', { name: projectButton(name) }).click()
   await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   const dash = await (
     await tech.request.get(root + '/api/v1/npi/dashboard')
@@ -466,7 +467,7 @@ try {
   ).toBeVisible()
   assert.equal((await detail(tech, id)).imports.length, 0)
   await tech.reload({ waitUntil: 'domcontentloaded' })
-  await tech.getByRole('button', { name, exact: true }).click()
+  await tech.getByRole('button', { name: projectButton(name) }).click()
   await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(
     drafts.getByText('draft-browser.xlsx', { exact: true }),
@@ -816,7 +817,7 @@ try {
   // Exercise the full stage workflow and manufacturing batch through visible controls.
   // Another role has completed/corrected material records; reopen the latest project.
   await tech.reload({ waitUntil: 'domcontentloaded' })
-  await tech.getByRole('button', { name, exact: true }).click()
+  await tech.getByRole('button', { name: projectButton(name) }).click()
   await tech.setViewportSize({ width: 1440, height: 1000 })
   for (const stage of ['manufacturing', 'prototype', 'test']) {
     await tech.getByRole('button', { name: '推进阶段', exact: false }).click()
@@ -934,7 +935,7 @@ try {
   await tech
     .getByRole('searchbox', { name: '搜索项目', exact: true })
     .fill(name)
-  await tech.getByRole('button', { name, exact: true }).click()
+  await tech.getByRole('button', { name: projectButton(name) }).click()
   await tech.getByRole('button', { name: '推进阶段', exact: false }).click()
   await saved(tech)
   assert.equal((await detail(tech, id)).currentNpiStage, 'completed')
@@ -971,7 +972,7 @@ try {
   await tech.getByLabel('要求齐套日期', { exact: true }).fill('2026-10-15')
   await tech.getByLabel('样机要求日期', { exact: true }).fill('2026-10-20')
   await saved(tech)
-  await tech.getByRole('button', { name: handoffName, exact: true }).click()
+  await tech.getByRole('button', { name: projectButton(handoffName) }).click()
   await tech
     .getByRole('button', { name: '项目计划与交接', exact: true })
     .click()
@@ -1000,7 +1001,7 @@ try {
   await expect(tech.getByText(handoffName, { exact: true })).toHaveCount(0)
   const incomingTech = await pageFor('nextTech')
   await incomingTech
-    .getByRole('button', { name: handoffName, exact: true })
+    .getByRole('button', { name: projectButton(handoffName) })
     .click()
   await expect(
     incomingTech.getByRole('button', { name: '项目计划与交接', exact: true }),
@@ -1175,11 +1176,11 @@ try {
   const normalToggle = list.getByRole('button', { name: /^正常项目/ })
   await expect(normalToggle).toHaveAttribute('aria-expanded', 'false')
   await expect(
-    list.getByRole('button', { name: normalProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(normalProject.name) }),
   ).toHaveCount(0)
   for (const p of [overdueProject, riskProject, pendingProject])
     await expect(
-      list.getByRole('button', { name: p.name, exact: true }),
+      list.getByRole('button', { name: projectButton(p.name) }),
     ).toBeVisible()
   await expect(
     list
@@ -1191,14 +1192,14 @@ try {
   await tech.keyboard.press('Enter')
   await expect(normalToggle).toHaveAttribute('aria-expanded', 'true')
   await expect(
-    list.getByRole('button', { name: normalProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(normalProject.name) }),
   ).toBeVisible()
   await normalToggle.click()
   await list
     .getByRole('searchbox', { name: '搜索项目' })
     .fill(normalProject.name)
   await expect(
-    list.getByRole('button', { name: normalProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(normalProject.name) }),
   ).toBeVisible()
   await expect(normalToggle).toHaveCount(0)
   await list
@@ -1218,7 +1219,7 @@ try {
   await expect(list.getByLabel('仅看异常', { exact: true })).toBeChecked()
   await expect(list.getByRole('status')).toContainText('共 3 个项目')
   await expect(
-    list.getByRole('button', { name: normalProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(normalProject.name) }),
   ).toHaveCount(0)
   await tech.evaluate(() => window.scrollTo(0, 0))
   await tech.screenshot({
@@ -1228,27 +1229,27 @@ try {
   await list.screenshot({ path: '/tmp/npi-dashboard-exceptions-desktop.png' })
   await kpis.getByRole('button', { name: /^完成项目按期率/ }).click()
   await expect(list.getByLabel('仅看异常', { exact: true })).not.toBeChecked()
-  await expect(list.getByRole('button', { name, exact: true })).toBeVisible()
+  await expect(list.getByRole('button', { name: projectButton(name) })).toBeVisible()
   await expect(list.getByRole('status')).toContainText('按期 1 个')
   await kpis.getByRole('button', { name: /^本月样机目标/ }).click()
   await expect(
-    list.getByRole('button', { name: normalProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(normalProject.name) }),
   ).toBeVisible()
   await expect(
-    list.getByRole('button', { name: otherManufacturing.name, exact: true }),
+    list.getByRole('button', { name: projectButton(otherManufacturing.name) }),
   ).toBeVisible()
   await kpis.getByRole('button', { name: /^风险项目/ }).click()
   await expect(list.getByRole('status')).toContainText('共 1 个项目')
   await expect(
-    list.getByRole('button', { name: riskProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(riskProject.name) }),
   ).toBeVisible()
   await kpis.getByRole('button', { name: /^待回复项目/ }).click()
   await expect(
-    list.getByRole('button', { name: pendingProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(pendingProject.name) }),
   ).toBeVisible()
   await kpis.getByRole('button', { name: /^逾期项目/ }).click()
   await expect(
-    list.getByRole('button', { name: overdueProject.name, exact: true }),
+    list.getByRole('button', { name: projectButton(overdueProject.name) }),
   ).toBeVisible()
   await tech.getByRole('button', { name: '制造准备', exact: true }).click()
   const prep = tech.getByRole('region', { name: '制造四节点任务', exact: true })
@@ -1269,7 +1270,7 @@ try {
   )
   await list.screenshot({ path: '/tmp/npi-project-list-mobile.png' })
   await list
-    .getByRole('button', { name: normalProject.name, exact: true })
+    .getByRole('button', { name: projectButton(normalProject.name) })
     .click()
   await expect(
     tech.getByRole('heading', { name: new RegExp(normalProject.name) }),
@@ -1466,7 +1467,7 @@ try {
     .getByRole('searchbox', { name: '搜索项目', exact: true })
     .fill(inheritanceSource.name)
   await inheritor
-    .getByRole('button', { name: inheritanceSource.name, exact: true })
+    .getByRole('button', { name: projectButton(inheritanceSource.name) })
     .click()
   await inheritor
     .getByRole('button', { name: '以此项目新建', exact: true })
@@ -1585,7 +1586,7 @@ try {
     prototypeRequiredDate: day,
   })
   const scale = await pageFor('technical')
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   const scaleBook = new ExcelJS.Workbook()
   await scaleBook.xlsx.load(
@@ -1788,7 +1789,7 @@ try {
     },
   )
   await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: '样机齐套', exact: true }).click()
   const readiness = scale.getByRole('group', {
     name: '齐套物料统计',
@@ -1942,7 +1943,7 @@ try {
     .getByRole('button', { name: '取消', exact: true })
     .click()
   await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: '样机齐套', exact: true }).click()
   await scale.setViewportSize({ width: 390, height: 844 })
   await addExternalButton.click()
@@ -2063,7 +2064,7 @@ try {
     },
   )
   await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(1)
   await expect(table).toContainText('手机异常机壳')
@@ -2133,7 +2134,7 @@ try {
   // Reopening the project resets its default; resize reacts until the user chooses a filter.
   await scale.setViewportSize({ width: 1440, height: 1000 })
   await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(4)
   await table.screenshot({ path: '/tmp/npi-bom-context-desktop.png' })
@@ -2163,7 +2164,7 @@ try {
     })
   }
   await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(0)
   await expect(
@@ -2660,7 +2661,7 @@ try {
     .locator('tbody tr')
     .filter({ hasText: scaleName })
   await focusProjectRow
-    .getByRole('button', { name: duplicateFocusName, exact: true })
+    .getByRole('button', { name: projectButton(duplicateFocusName) })
     .click()
   await expect(
     focusPage.getByRole('tab', { name: '样机齐套', exact: true }),
@@ -2753,7 +2754,7 @@ try {
   await focusPage.getByRole('button', { name: '首页', exact: true }).click()
   await focusPage
     .getByRole('region', { name: '项目进度列表', exact: true })
-    .getByRole('button', { name: scaleName, exact: true })
+    .getByRole('button', { name: projectButton(scaleName) })
     .click()
   await expect(
     focusPage.getByRole('tab', { name: '概览', exact: true }),
@@ -2769,7 +2770,7 @@ try {
   await scale.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
   await scale.getByRole('button', { name: '首页', exact: true }).click()
   await expect.poll(() => scale.evaluate(() => scrollY)).toBe(0)
-  await scale.getByRole('button', { name: scaleName, exact: true }).click()
+  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
   await expect(
     scale.getByRole('tab', { name: '概览', exact: true }),
   ).toHaveAttribute('aria-selected', 'true')
@@ -2791,7 +2792,7 @@ try {
   )
   const quantityPage = await pageFor('technical')
   await quantityPage
-    .getByRole('button', { name: quantityDetail.name, exact: true })
+    .getByRole('button', { name: projectButton(quantityDetail.name) })
     .click()
   await quantityPage.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   const quantityBook = new ExcelJS.Workbook()
@@ -2819,7 +2820,7 @@ try {
     .click()
   await expect(
     quantityPage.getByText(
-      '数量变化 · PRECISE-001 · 999999999999.123456 → 999999999999.123457',
+      '数量变化 · PRECISE-001 → PRECISE-001 · 999999999999.123456 → 999999999999.123457',
       { exact: false },
     ),
   ).toBeVisible()
@@ -3134,7 +3135,7 @@ try {
   )
   const templateTech = await pageFor('technical')
   await templateTech
-    .getByRole('button', { name: templateDetail.name, exact: true })
+    .getByRole('button', { name: projectButton(templateDetail.name) })
     .click()
   await templateTech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await templateTech
@@ -3306,7 +3307,7 @@ try {
   )
   const identityTech = await pageFor('technical')
   await identityTech
-    .getByRole('button', { name: identityDetail.name, exact: true })
+    .getByRole('button', { name: projectButton(identityDetail.name) })
     .click()
   await identityTech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   const identityBook = new ExcelJS.Workbook()
@@ -3469,7 +3470,7 @@ try {
     `/projects/${motherProject.id}`,
   )
   await motherPage
-    .getByRole('button', { name: motherDetail.name, exact: true })
+    .getByRole('button', { name: projectButton(motherDetail.name) })
     .click()
   await motherPage.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   const motherBook = new ExcelJS.Workbook()
@@ -3540,7 +3541,7 @@ try {
     .click()
   await motherPage.reload()
   await motherPage
-    .getByRole('button', { name: motherDetail.name, exact: true })
+    .getByRole('button', { name: projectButton(motherDetail.name) })
     .click()
   await motherPage.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await motherPage
@@ -3629,7 +3630,7 @@ try {
         `/projects/${sampleProject.id}`,
       )
       await samplePage
-        .getByRole('button', { name: sampleDetail.name, exact: true })
+        .getByRole('button', { name: projectButton(sampleDetail.name) })
         .click()
       await samplePage
         .getByRole('tab', { name: 'ERP BOM', exact: true })

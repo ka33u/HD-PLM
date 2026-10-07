@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from './work-ownership'
 import { createHash } from 'node:crypto'
-import { and, asc, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from 'drizzle-orm'
 import { db } from '../db'
 import { projects as projectRecords } from '../db/schema/projects'
 import { users } from '../db/schema/users'
@@ -40,7 +52,14 @@ import type { TransactionClient } from '../db'
 
 type Tx = TransactionClient
 type Role = typeof s.npiUserRoles.$inferSelect.role
-export type Actor = { id: string; name: string; role: Role }
+export type Actor = {
+  id: string
+  name: string
+  role: Role
+  departmentId?: string | null
+  departmentName?: string | null
+  collaboratorIds?: string[]
+}
 type Project = typeof s.npiProjects.$inferSelect
 type Track = typeof s.npiTrackingItems.$inferSelect
 export const uuidValue = (v: unknown) => {
@@ -87,6 +106,7 @@ export async function getActor(
   tx: Tx | typeof db = db,
   lock = false,
 ): Promise<Actor> {
+  if (lock) await tx.execute(sql`select pg_advisory_xact_lock_shared(73421001)`)
   const userQuery = tx.select().from(users).where(eq(users.id, userId))
   const [user] = lock ? await userQuery.for('share') : await userQuery
   if (!user?.active) return denied()
@@ -96,7 +116,40 @@ export async function getActor(
     .where(eq(s.npiUserRoles.userId, userId))
   const role = mapping?.role
   if (!role) return denied()
-  return { id: userId, name: user.name || user.email, role }
+  const [department] = mapping?.departmentId
+    ? await tx
+        .select()
+        .from(s.npiDepartments)
+        .where(
+          and(
+            eq(s.npiDepartments.id, mapping.departmentId),
+            eq(s.npiDepartments.role, role as 'manufacturing'),
+          ),
+        )
+    : []
+  const peers = department
+    ? await tx
+        .select({ id: users.id })
+        .from(s.npiUserRoles)
+        .innerJoin(
+          users,
+          and(eq(users.id, s.npiUserRoles.userId), eq(users.active, true)),
+        )
+        .where(
+          and(
+            eq(s.npiUserRoles.departmentId, department.id),
+            eq(s.npiUserRoles.role, role),
+          ),
+        )
+    : []
+  return {
+    id: userId,
+    name: user.name || user.email,
+    role,
+    departmentId: department?.id || null,
+    departmentName: department?.name || null,
+    collaboratorIds: peers.map((p) => p.id),
+  }
 }
 export async function loadProject(
   tx: Tx | typeof db,
@@ -111,10 +164,11 @@ export async function loadProject(
     .from(s.npiProjects)
     .where(eq(s.npiProjects.programId, id))
   const [p] = edit ? await query.for('update') : await query
-  if (!p) throw new NpiError('PROGRAM_NOT_FOUND', '新品项目不存在', 404)
-  const isOwner = [p.technicalOwnerId, p.manufacturingOwnerId].includes(
-    actor.id,
-  )
+  if (!p || p.deletedAt)
+    throw new NpiError('PROGRAM_NOT_FOUND', '新品项目不存在或已移入回收站', 404)
+  const isOwner =
+    ownsWork(actor, p.technicalOwnerId) ||
+    ownsWork(actor, p.manufacturingOwnerId)
   if (!(
     actor.role === 'admin' ||
     ((!edit || edit === 'plan') && actor.role === 'supervisor') ||
@@ -142,9 +196,15 @@ export async function metadata(userId: string) {
       email: users.email,
       active: users.active,
       role: s.npiUserRoles.role,
+      departmentId: s.npiUserRoles.departmentId,
+      departmentName: s.npiDepartments.name,
     })
     .from(users)
     .leftJoin(s.npiUserRoles, eq(users.id, s.npiUserRoles.userId))
+    .leftJoin(
+      s.npiDepartments,
+      eq(s.npiDepartments.id, s.npiUserRoles.departmentId),
+    )
     .where(eq(users.active, true))
   const [recent] = await db
     .select({ ownerId: users.id })
@@ -484,12 +544,19 @@ export async function dashboard(userId: string) {
         .select()
         .from(s.npiProjects)
         .where(
-          ['admin', 'supervisor'].includes(actor.role)
-            ? undefined
-            : or(
-                eq(s.npiProjects.technicalOwnerId, actor.id),
-                eq(s.npiProjects.manufacturingOwnerId, actor.id),
-              ),
+          and(
+            isNull(s.npiProjects.deletedAt),
+            ['admin', 'supervisor'].includes(actor.role)
+              ? undefined
+              : or(
+                  inArray(s.npiProjects.technicalOwnerId, [
+                    ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+                  ]),
+                  inArray(s.npiProjects.manufacturingOwnerId, [
+                    ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+                  ]),
+                ),
+          ),
         )
       const ids = visible.map((p) => p.programId)
       const day = today(),
@@ -681,7 +748,9 @@ async function personalMaterials(userId: string, assigned: boolean) {
       const rows = await tx
         .select({
           item: s.npiTrackingItems,
+          ownerName: users.name,
           projectName: projectRecords.name,
+          motorModel: s.npiProjects.motorModel,
           projectCode: projectRecords.code,
           currentNpiStage: s.npiProjects.currentNpiStage,
           activeBomImportId: s.npiProjects.activeBomImportId,
@@ -690,6 +759,7 @@ async function personalMaterials(userId: string, assigned: boolean) {
           bomVersionNo: s.npiBomImports.versionNo,
         })
         .from(s.npiTrackingItems)
+        .innerJoin(users, eq(users.id, s.npiTrackingItems.ownerId))
         .innerJoin(
           projectRecords,
           eq(projectRecords.id, s.npiTrackingItems.programId),
@@ -708,7 +778,10 @@ async function personalMaterials(userId: string, assigned: boolean) {
         )
         .where(
           and(
-            eq(s.npiTrackingItems.ownerId, actor.id),
+            inArray(s.npiTrackingItems.ownerId, [
+              ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+            ]),
+            isNull(s.npiProjects.deletedAt),
             inArray(s.npiTrackingItems.trackingType, types),
           ),
         )
@@ -725,7 +798,9 @@ async function personalMaterials(userId: string, assigned: boolean) {
         )
         .where(
           and(
-            eq(s.npiTrackingItems.ownerId, actor.id),
+            inArray(s.npiTrackingItems.ownerId, [
+              ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+            ]),
             inArray(s.npiTrackingItems.trackingType, types),
           ),
         )
@@ -746,7 +821,9 @@ async function personalMaterials(userId: string, assigned: boolean) {
                     current: r.bomImportId === r.activeBomImportId,
                   }
                 : null,
+            ownerName: r.ownerName,
             projectName: r.projectName,
+            motorModel: r.motorModel,
             projectCode: r.projectCode,
             currentNpiStage: r.currentNpiStage,
             status: itemStatus(r.item),
@@ -767,11 +844,17 @@ export async function trackingHistory(userId: string, id: string) {
         .where(eq(s.npiTrackingItems.id, uuidValue(id)))
       if (!item)
         throw new NpiError('TRACKING_ITEM_NOT_FOUND', '跟踪项不存在', 404)
+      const [visibleProject] = await tx
+        .select({ deletedAt: s.npiProjects.deletedAt })
+        .from(s.npiProjects)
+        .where(eq(s.npiProjects.programId, item.programId))
+      if (!visibleProject || visibleProject.deletedAt)
+        throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在或已移入回收站', 404)
       if (actor.role === 'procurement') {
-        if (item.trackingType !== 'purchase' || item.ownerId !== actor.id)
+        if (item.trackingType !== 'purchase' || !ownsWork(actor, item.ownerId))
           return denied()
       } else if (!(
-        item.ownerId === actor.id &&
+        ownsWork(actor, item.ownerId) &&
         ['material', 'other'].includes(item.trackingType) &&
         ['technical', 'manufacturing'].includes(actor.role)
       ))
@@ -822,7 +905,48 @@ export async function trackingHistory(userId: string, id: string) {
         changedAt: h.changedAt,
         actorName: actorName || '系统用户',
       }))
+      let bomChange: {
+        type: string
+        before: {
+          code: string
+          name: string
+          specification: string
+          qty: string
+          unit: string
+        }
+        after: {
+          code: string
+          name: string
+          specification: string
+          qty: string
+          unit: string
+        } | null
+      } | null = null
+      if (bom && bom.activeId && bom.importId !== bom.activeId) {
+        const entries = await tx
+          .select()
+          .from(s.npiBomItems)
+          .where(inArray(s.npiBomItems.importId, [bom.importId, bom.activeId]))
+        const change = bomDiff(
+          entries.filter((r) => r.importId === bom.importId).map((r) => r.row),
+          entries.filter((r) => r.importId === bom.activeId).map((r) => r.row),
+        ).find((d) => d.before?.id === item.bomItemId)
+        const brief = (r: BomRow) => ({
+          code: r.materialCode,
+          name: r.materialName,
+          specification: r.specification,
+          qty: r.qty,
+          unit: r.unit,
+        })
+        if (change?.before)
+          bomChange = {
+            type: change.type,
+            before: brief(change.before),
+            after: change.after ? brief(change.after) : null,
+          }
+      }
       return {
+        bomChange,
         item: {
           id: item.id,
           name: item.name,
@@ -970,7 +1094,8 @@ async function editableItem(
     .from(s.npiProjects)
     .where(eq(s.npiProjects.programId, lookup.programId))
     .for('update')
-  if (!p) throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在', 404)
+  if (!p || p.deletedAt)
+    throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在或已移入回收站', 404)
   const [item] = await tx
     .select()
     .from(s.npiTrackingItems)
@@ -979,7 +1104,7 @@ async function editableItem(
   if (!item) throw new NpiError('TRACKING_ITEM_NOT_FOUND', '跟踪项不存在', 404)
   if (!(
     a.role === 'admin' ||
-    (item.ownerId === a.id &&
+    (ownsWork(a, item.ownerId) &&
       (item.trackingType === 'purchase'
         ? a.role === 'procurement'
         : ['manufacturing', 'technical'].includes(a.role)))
@@ -1316,7 +1441,8 @@ export async function manufacturingPlan(
   return db.transaction(async (tx) => {
     const a = await getActor(userId, tx, true)
     const p = await loadProject(tx, id, a, true)
-    if (a.role !== 'admin' && a.id !== p.manufacturingOwnerId) return denied()
+    if (a.role !== 'admin' && !ownsWork(a, p.manufacturingOwnerId))
+      return denied()
     const [plan] = await tx
       .select()
       .from(s.npiManufacturingPlan)
@@ -1392,7 +1518,8 @@ export async function completeManufacturing(
   return db.transaction(async (tx) => {
     const a = await getActor(userId, tx, true)
     const p = await loadProject(tx, id, a, true)
-    if (a.role !== 'admin' && a.id !== p.manufacturingOwnerId) return denied()
+    if (a.role !== 'admin' && !ownsWork(a, p.manufacturingOwnerId))
+      return denied()
     const [plan] = await tx
       .select()
       .from(s.npiManufacturingPlan)
@@ -1835,8 +1962,13 @@ async function reconciliationFor(tx: Tx | typeof db, p: Project) {
         item,
         oldRow: old.row,
         oldPath: groupLocations.get(old.importId)!.get(old.id)!.label,
+        replacement: match?.type === 'CODE_CHANGED' ? match.after : null,
         suggestedId:
-          match?.after && !occupied.has(match.after.id) ? match.after.id : null,
+          match?.after &&
+          match.after.materialCode === old.materialCode &&
+          !occupied.has(match.after.id)
+            ? match.after.id
+            : null,
         changeType:
           match?.type ?? (candidates.length ? 'AMBIGUOUS' : 'REMOVED'),
         candidates,
@@ -2114,7 +2246,7 @@ export async function reportManufacturingException(
     const p = await loadProject(tx, programId, a, true)
     if (!(
       a.role === 'admin' ||
-      (a.role === 'manufacturing' && a.id === p.manufacturingOwnerId)
+      (a.role === 'manufacturing' && ownsWork(a, p.manufacturingOwnerId))
     ))
       return denied()
     versionCheck(p.version, input.expectedProjectVersion)
@@ -2249,6 +2381,7 @@ export type NpiDashboard = Awaited<ReturnType<typeof dashboard>>
 export type NpiTracking = Track & {
   status: string
   ownerName?: string
+  motorModel?: string
   projectName?: string
   projectCode?: string
   bomReference?: TrackingBomReference | null

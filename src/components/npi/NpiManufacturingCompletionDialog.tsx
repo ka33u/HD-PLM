@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from '../../lib/npi/work-ownership'
 import { useRef, useState } from 'react'
 import { nodeNames, today } from '../../lib/npi/domain'
 import {
@@ -39,7 +40,7 @@ export function NpiManufacturingCompletionDialog({
   const nodes = current.items.filter((i) => i.sourceType === 'MANUFACTURING')
   const authorized =
     currentActor.role === 'admin' ||
-    currentActor.id === current.manufacturingOwnerId
+    ownsWork(currentActor, current.manufacturingOwnerId)
   const locked =
     !authorized ||
     current.currentNpiStage === 'completed' ||

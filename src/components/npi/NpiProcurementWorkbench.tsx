@@ -52,6 +52,7 @@ export function NpiProcurementWorkbench({
               i.name,
               i.projectCode,
               i.projectName,
+              i.motorModel,
               i.specification,
               i.supplier,
               i.remark,

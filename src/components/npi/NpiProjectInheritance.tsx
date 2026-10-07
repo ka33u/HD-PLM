@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { projectTitle } from '../../lib/npi/project-identity'
+import { requestId as createRequestId } from '../../lib/request-id'
 import { useState } from 'react'
 import { profileFields } from '../../lib/npi/project-profile'
 import {
@@ -35,7 +37,7 @@ export function NpiProjectInheritance({
     typeof proposal[key] === 'string' ? proposal[key] : fallback
   const edit = () => {
     setCode(
-      `NPI-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      `NPI-${new Date().getFullYear()}-${createRequestId().slice(0, 8).toUpperCase()}`,
     )
     setOpen(true)
     setError('')
@@ -138,7 +140,7 @@ export function NpiProjectInheritance({
             {preview ? '确认继承并新建' : '从相似项目新建'}
           </DialogTitle>
           <DialogDescription>
-            来源：{project.name}
+            来源：{projectTitle(project)}
             。复用项目参数和物料配置，新的时间承诺由各负责人重新回复。
           </DialogDescription>
           {error && (

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { projectTitle } from '../../lib/npi/project-identity'
 import { useRef, useState } from 'react'
 import {
   Dialog,
@@ -41,7 +42,7 @@ export function NpiManufacturingReplyDialog({
       >
         <DialogTitle>集中回复制造四节点</DialogTitle>
         <DialogDescription>
-          {project.name} · {project.code}
+          {projectTitle(project)} · {project.code}
           。只填写已确认的节点日期，其他节点保留待回复。
         </DialogDescription>
         <NpiManufacturingReply

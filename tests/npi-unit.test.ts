@@ -21,15 +21,8 @@ import {
   promiseChangeCounts,
   todayActivity,
 } from '../src/lib/npi/activity'
-import {
-  bomDiff,
-  defaultTemplate,
-  parseBom,
-} from '../src/lib/npi/bom'
-import {
-  previewExcel,
-  validateWorkbookArchive,
-} from '../src/lib/npi/excel'
+import { bomDiff, defaultTemplate, parseBom } from '../src/lib/npi/bom'
+import { previewExcel, validateWorkbookArchive } from '../src/lib/npi/excel'
 import {
   dashboardMetrics,
   projectMatchesFilter,
@@ -215,7 +208,7 @@ test('BOM diff respects position and reports added/removed/quantity', () => {
     bomDiff(a.previewRows, b.previewRows)
       .map((r) => r.type)
       .sort(),
-    ['ADDED', 'QTY_CHANGED', 'REMOVED'],
+    ['CODE_CHANGED', 'QTY_CHANGED'],
   )
 })
 export async function fixtureWorkbook() {
@@ -828,6 +821,7 @@ test('Optional project profile normalizes numeric values, distinguishes clear/om
     0,
   )
   assert.deepEqual(readProjectProfile(), {
+    motorCode: '',
     customer: '',
     description: '',
     application: '',
@@ -1096,4 +1090,28 @@ test('BOM parser keeps raw tracking attributes and warns on unknown, missing or 
     ),
   )
   assert.ok(duplicate.previewRows.every((row) => !row.suggestedTracking))
+})
+
+test('BOM revisions report specification and supply metadata changes, and keep old/new codes', () => {
+  const original = parseBom(
+    [headers, ['+', 10, 'OLD', '物料', 1]],
+    'test',
+    template,
+  ).previewRows
+  const newer = original.map((r) => ({
+    ...r,
+    id: crypto.randomUUID(),
+    specification: '新版规格',
+  }))
+  assert.equal(bomDiff(original, newer)[0]!.type, 'FIELDS_CHANGED')
+  newer[0]!.materialCode = 'NEW'
+  const d = bomDiff(original, newer)[0]!
+  assert.equal(d.type, 'CODE_CHANGED')
+  assert.equal(d.before!.materialCode, 'OLD')
+  assert.equal(d.after!.materialCode, 'NEW')
+  newer[0]!.lineNo = ''
+  assert.deepEqual(
+    bomDiff(original, newer).map((d) => d.type),
+    ['ADDED', 'REMOVED'],
+  )
 })

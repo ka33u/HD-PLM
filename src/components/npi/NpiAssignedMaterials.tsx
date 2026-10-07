@@ -114,6 +114,7 @@ export function NpiAssignedMaterials({
               item.specification,
               item.bomReference?.materialCode,
               item.projectName,
+              item.motorModel,
               item.projectCode,
             ]
               .join(' ')
@@ -259,9 +260,18 @@ export function NpiAssignedMaterials({
                     </div>
                     <div>{item.bomReference?.materialCode}</div>
                     <small>
-                      {item.projectCode} · {item.projectName}
+                      {item.motorModel} · {item.projectName} ·{' '}
+                      {item.projectCode}
                     </small>
                     <div>{item.specification}</div>
+                    <small>主负责人：{item.ownerName}</small>
+                    {item.bomReference &&
+                      !item.bomReference.current &&
+                      !item.actualCompleteDate && (
+                        <small className="npi-warning-text">
+                          BOM已换版，请在承诺历史中查看物料对照。
+                        </small>
+                      )}
                   </td>
                   <td data-label="要求日期">{item.requiredDate}</td>
                   <td data-label="当前承诺">

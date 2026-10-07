@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from '../../lib/npi/work-ownership'
+import { NpiProjectTrash } from './NpiProjectTrash'
+import { NpiBomRevision } from './NpiBomRevision'
+import { projectTitle } from '../../lib/npi/project-identity'
+import { requestId as createRequestId } from '../../lib/request-id'
 import {
   useCallback,
   useEffect,
@@ -447,14 +452,14 @@ export function NpiWorkspace() {
           p.currentNpiStage !== 'completed' &&
           (meta?.actor.role === 'admin' ||
             (['technical', 'manufacturing'].includes(meta?.actor.role || '') &&
-              meta?.actor.id === p.manufacturingOwnerId)),
+              ownsWork(meta?.actor, p.manufacturingOwnerId))),
       )
       setManufacturingReplyOpen(
         manufacturingAction === 'reply' &&
           p.currentNpiStage !== 'completed' &&
           (meta?.actor.role === 'admin' ||
             (['technical', 'manufacturing'].includes(meta?.actor.role || '') &&
-              meta?.actor.id === p.manufacturingOwnerId)),
+              ownsWork(meta?.actor, p.manufacturingOwnerId))),
       )
     } catch (e) {
       if (request === projectRequest.current) setError(String(e))
@@ -476,7 +481,7 @@ export function NpiWorkspace() {
       )
       .map((u) => ({
         value: u.id,
-        label: `${u.name || u.email} · ${roleNames[u.role || ''] || '管理员'}`,
+        label: `${u.name || u.email} · ${roleNames[u.role || ''] || '管理员'}${u.departmentName ? ' · ' + u.departmentName + '协作' : ''}`,
       }))
   const selectOwner = (
     key = 'ownerId',
@@ -499,7 +504,7 @@ export function NpiWorkspace() {
       fields: [
         { key: 'name', label: '新品名称', required: true },
         { key: 'motorModel', label: '电机型号', required: true },
-        { key: 'code', label: '项目编号（留空自动生成）' },
+        { key: 'code', label: '项目编号 / 订单编号（留空自动生成）' },
         selectOwner(
           'technicalOwnerId',
           '技术负责人',
@@ -638,11 +643,16 @@ export function NpiWorkspace() {
         { key: 'reason', label: '更正原因', type: 'textarea', required: true },
       ],
     })
-  const showTracking = (row: BomRow) => {
+  const [revisionRow, setRevisionRow] = useState<BomRow | null>(null)
+  const showTracking = (row: BomRow, purchase = false) => {
     if (!project) return
     const existing = project.items.find((i) => i.bomItemId === row.id)
     openModal({
-      title: existing ? '调整物料跟踪' : '设为重点跟踪',
+      title: purchase
+        ? '分配采购任务'
+        : existing
+          ? '调整物料跟踪'
+          : '设为重点跟踪',
       help: `${row.materialCode} · ${row.materialName}${row.trackingSuggestion?.reasons.length ? ' · 建议依据：' + row.trackingSuggestion.reasons.join('；') : ''}。由负责人确认责任人、要求日期和齐套影响后保存。`,
       path: `/bom-items/${row.id}/tracking`,
       method: 'PATCH',
@@ -651,8 +661,13 @@ export function NpiWorkspace() {
         selectOwner(
           'ownerId',
           '回复责任人',
-          ['procurement', 'manufacturing', 'technical'],
-          existing?.ownerId || project.manufacturingOwnerId,
+          purchase
+            ? ['procurement']
+            : ['procurement', 'manufacturing', 'technical'],
+          existing?.ownerId ||
+            (purchase
+              ? meta?.recentProcurementOwnerId || ''
+              : project.manufacturingOwnerId),
         ),
         {
           key: 'requiredDate',
@@ -743,6 +758,13 @@ export function NpiWorkspace() {
     try {
       if (modal.transform) data = modal.transform(data)
       await api(modal.path, modal.method || 'POST', data)
+      if (modal.path.endsWith('/trash')) {
+        setModal(null)
+        navigate('projects')
+        await refresh()
+        setNotice('项目已移入回收站，可恢复')
+        return
+      }
       setNotice('已保存')
       await refresh(modal.path === '/roles')
       setModal(null)
@@ -889,7 +911,7 @@ export function NpiWorkspace() {
         previewToken: preview.previewToken,
       })
       setNotice(
-        `「${project.name}」BOM草稿已保存，可从“我的BOM草稿”恢复；尚未生成正式版本`,
+        `「${projectTitle(project)}」BOM草稿已保存，可从“我的BOM草稿”恢复；尚未生成正式版本`,
       )
       if (current()) {
         setPreview(null)
@@ -898,7 +920,7 @@ export function NpiWorkspace() {
         setDraftRevision((n) => n + 1)
       }
     } catch (e) {
-      setError(`「${project.name}」草稿保存未完成：${String(e)}`)
+      setError(`「${projectTitle(project)}」草稿保存未完成：${String(e)}`)
     } finally {
       pending.current = false
       setBusy(false)
@@ -916,7 +938,8 @@ export function NpiWorkspace() {
         'POST',
         action === 'resume' ? { templateId: templateId || undefined } : {},
       )
-      if (action === 'discard') setNotice(`「${project.name}」草稿已移除`)
+      if (action === 'discard')
+        setNotice(`「${projectTitle(project)}」草稿已移除`)
       if (!current()) return
       if (action === 'resume') {
         setPreview(result)
@@ -933,7 +956,7 @@ export function NpiWorkspace() {
       setDraftRevision((n) => n + 1)
     } catch (e) {
       if (current() || action === 'discard')
-        setError(`「${project.name}」草稿操作未完成：${String(e)}`)
+        setError(`「${projectTitle(project)}」草稿操作未完成：${String(e)}`)
     } finally {
       pending.current = false
       setBusy(false)
@@ -953,7 +976,9 @@ export function NpiWorkspace() {
         { previewToken: preview.previewToken, activate: true },
       )
       imported = true
-      setNotice(`「${project.name}」BOM新版本已保存，旧版及原有承诺继续保留`)
+      setNotice(
+        `「${projectTitle(project)}」BOM新版本已保存，旧版及原有承诺继续保留`,
+      )
       if (current()) {
         setPreview(null)
         setUploadFile(null)
@@ -967,7 +992,7 @@ export function NpiWorkspace() {
       setBomConfirmation(false)
     } catch (e) {
       setError(
-        `「${project.name}」${imported ? 'BOM已保存，但页面读取失败，请刷新核对' : '导入结果待核对，请刷新项目确认'}：${String(e)}`,
+        `「${projectTitle(project)}」${imported ? 'BOM已保存，但页面读取失败，请刷新核对' : '导入结果待核对，请刷新项目确认'}：${String(e)}`,
       )
     } finally {
       pending.current = false
@@ -979,7 +1004,7 @@ export function NpiWorkspace() {
       template || {
         config: {
           ...defaultTemplate,
-          id: `erp-${crypto.randomUUID()}`,
+          id: `erp-${createRequestId()}`,
           name: '新ERP模板',
         },
         version: 0,
@@ -989,9 +1014,8 @@ export function NpiWorkspace() {
   const canManage =
     meta?.actor.role === 'admin' ||
     (!!project &&
-      [project.technicalOwnerId, project.manufacturingOwnerId].includes(
-        meta?.actor.id || '',
-      ) &&
+      (ownsWork(meta?.actor, project.technicalOwnerId) ||
+        ownsWork(meta?.actor, project.manufacturingOwnerId)) &&
       ['technical', 'manufacturing'].includes(meta?.actor.role || ''))
   const canAdjustPlan = canManage || meta?.actor.role === 'supervisor'
   const canReply = (i: NpiTracking) =>
@@ -999,10 +1023,10 @@ export function NpiWorkspace() {
     !i.actualCompleteDate &&
     project?.currentNpiStage !== 'completed' &&
     (meta?.actor.role === 'admin' ||
-      (i.ownerId === meta?.actor.id &&
+      (ownsWork(meta?.actor, i.ownerId) &&
         (i.trackingType === 'purchase'
-          ? meta.actor.role === 'procurement'
-          : ['technical', 'manufacturing'].includes(meta.actor.role))))
+          ? meta?.actor.role === 'procurement'
+          : ['technical', 'manufacturing'].includes(meta?.actor.role || ''))))
   const trackingTable = (items: Array<NpiTracking>) => (
     <div className="npi-table-scroll">
       <table className="npi-table npi-tracking-table">
@@ -1043,10 +1067,20 @@ export function NpiWorkspace() {
                   <>
                     <small>物料编码：{i.bomReference.materialCode}</small>
                     <small>{bomReferenceLabel(i.bomReference)}</small>
+                    {!i.bomReference.current && !i.actualCompleteDate && (
+                      <small className="npi-warning-text">
+                        BOM已换版，请在“历史”查看物料对照并联系技术负责人复核。
+                      </small>
+                    )}
                   </>
                 )}
                 <small>
-                  {[i.projectCode, i.projectName, sourceNames[i.sourceType]]
+                  {[
+                    i.motorModel,
+                    i.projectName,
+                    i.projectCode,
+                    sourceNames[i.sourceType],
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                   {i.affectsKit ? ' · 影响齐套' : ''}
@@ -1205,7 +1239,12 @@ export function NpiWorkspace() {
             <span>{meta?.actor.name.slice(0, 1) || '新'}</span>
             <div>
               {meta?.actor.name || '正在连接'}
-              <small>{roleNames[meta?.actor.role || '']}</small>
+              <small>
+                {roleNames[meta?.actor.role || '']}
+                {meta?.actor.departmentName
+                  ? ` · ${meta.actor.departmentName}`
+                  : ''}
+              </small>
             </div>
           </div>
         </div>
@@ -1268,10 +1307,13 @@ export function NpiWorkspace() {
                 </div>
                 {['admin', 'technical'].includes(meta.actor.role) &&
                   ['dashboard', 'projects', 'bom'].includes(view) && (
-                    <button className="npi-button" onClick={showCreate}>
-                      <Plus size={18} />
-                      新建新品
-                    </button>
+                    <div className="npi-actions">
+                      <NpiProjectTrash api={api} onChanged={() => refresh()} />
+                      <button className="npi-button" onClick={showCreate}>
+                        <Plus size={18} />
+                        新建新品
+                      </button>
+                    </div>
                   )}
               </div>
             )}
@@ -1352,7 +1394,8 @@ export function NpiWorkspace() {
                   <div>
                     <div className="npi-eyebrow">{project.code}</div>
                     <h1>
-                      {project.name} <Badge status={project.riskStatus} />
+                      {projectTitle(project)}{' '}
+                      <Badge status={project.riskStatus} />
                     </h1>
                     <p>
                       {project.motorModel} · 样机要求{' '}
@@ -1399,6 +1442,39 @@ export function NpiWorkspace() {
                         }}
                       />
                     )}
+                  {(meta?.actor.role === 'admin' ||
+                    (meta?.actor.role === 'technical' &&
+                      meta.actor.id === project.technicalOwnerId)) && (
+                    <button
+                      className="npi-button secondary"
+                      onClick={() =>
+                        openModal({
+                          title: '删除项目（移入回收站）',
+                          help: '项目将从待办与报表移除，全部资料和历史保留，可在项目回收站恢复。请输入项目编号确认。',
+                          path: `/projects/${project.id}/trash`,
+                          fixed: {
+                            action: 'delete',
+                            expectedVersion: project.version,
+                          },
+                          fields: [
+                            {
+                              key: 'confirmCode',
+                              label: '确认项目编号',
+                              required: true,
+                            },
+                            {
+                              key: 'reason',
+                              label: '删除原因',
+                              type: 'textarea',
+                              required: true,
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      删除项目
+                    </button>
+                  )}
                   {canManage && project.currentNpiStage !== 'completed' && (
                     <button
                       className="npi-button secondary"
@@ -1667,7 +1743,7 @@ export function NpiWorkspace() {
                         (['technical', 'manufacturing'].includes(
                           meta?.actor.role || '',
                         ) &&
-                          meta?.actor.id === project.manufacturingOwnerId)
+                          ownsWork(meta?.actor, project.manufacturingOwnerId))
                       )
                     }
                   />
@@ -1683,7 +1759,10 @@ export function NpiWorkspace() {
                         (['technical', 'manufacturing'].includes(
                           meta?.actor.role || '',
                         ) &&
-                          meta?.actor.id === project.manufacturingOwnerId)) &&
+                          ownsWork(
+                            meta?.actor,
+                            project.manufacturingOwnerId,
+                          ))) &&
                         project.currentNpiStage !== 'completed' && (
                           <div className="npi-actions">
                             <button
@@ -1828,7 +1907,7 @@ export function NpiWorkspace() {
                         <div>
                           <strong>BOM新版本导入完成</strong>
                           <p>
-                            原始Excel和历史版本已保留，可继续设置重点跟踪物料。
+                            原始Excel和历史版本已保留。需要采购的物料请点击“分配采购”；生产物料可设置重点跟踪。
                           </p>
                         </div>
                       </div>
@@ -1945,6 +2024,14 @@ export function NpiWorkspace() {
                                   ? '存在多个位置或目标已跟踪，请人工核对'
                                   : '当前版本已无此编码'}
                             </p>
+                            {r.replacement && (
+                              <p>
+                                原编码 {r.oldRow.materialCode} → 同位置新编码{' '}
+                                {r.replacement.materialCode}（
+                                {r.replacement.materialName}
+                                ）。请核对后停止旧跟踪，再为新物料分配任务，承诺分别保留。
+                              </p>
+                            )}
                             <div className="npi-actions">
                               {['admin', 'technical'].includes(
                                 meta?.actor.role || '',
@@ -2145,7 +2232,9 @@ export function NpiWorkspace() {
                     )}
                     <div hidden={bomLoading !== null} aria-label="BOM版本内容">
                       <p className="npi-muted">
-                        跟踪建议依据模板映射的物料属性生成，确认前不计入待回复或齐套。没有属性时请人工判断，采购类型和仓库名称不代表新规格或长周期。任意层级均可手动设为重点。
+                        跟踪建议依据模板映射的物料属性生成，确认前不计入待回复或齐套。需要采购的物料请点击“分配采购”，选择采购负责人和要求日期后即进入采购待办；“供应
+                        /
+                        部门”是BOM资料，不决定任务归属。没有属性时请人工判断，采购类型和仓库名称不代表新规格或长周期。任意层级均可手动设为重点。
                       </p>
                       <div className="npi-panel-title">
                         <div className="npi-filters">
@@ -2294,6 +2383,31 @@ export function NpiWorkspace() {
                                     </div>
                                   </td>
                                   <td data-label="跟踪">
+                                    {bomVersion === project.activeBomImportId &&
+                                      project.currentNpiStage !==
+                                        'completed' && (
+                                        <div className="npi-row-actions">
+                                          {canManage && !t && (
+                                            <button
+                                              onClick={() =>
+                                                showTracking(r, true)
+                                              }
+                                            >
+                                              分配采购
+                                            </button>
+                                          )}
+                                          {(meta?.actor.role === 'admin' ||
+                                            (meta?.actor.role === 'technical' &&
+                                              meta.actor.id ===
+                                                project.technicalOwnerId)) && (
+                                            <button
+                                              onClick={() => setRevisionRow(r)}
+                                            >
+                                              修订物料
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
                                     {r.suggestedTracking && (
                                       <small className="npi-muted">
                                         {r.trackingSuggestion?.reasons.join(
@@ -2412,11 +2526,24 @@ export function NpiWorkspace() {
                                       REMOVED: '移除',
                                       QTY_CHANGED: '数量变化',
                                       MOVED: '位置移动',
+                                      CODE_CHANGED: '编码替换（需人工核对）',
+                                      FIELDS_CHANGED: '物料资料变化',
                                     } as Record<string, string>
                                   )[d.type]
                                 }{' '}
-                                · {(d.after || d.before)?.materialCode} ·{' '}
+                                · {d.before?.materialCode || '—'} →{' '}
+                                {d.after?.materialCode || '—'} ·{' '}
                                 {d.before?.qty || '—'} → {d.after?.qty || '—'}
+                                <small>
+                                  名称：{d.before?.materialName || '—'} →{' '}
+                                  {d.after?.materialName || '—'}；规格：
+                                  {d.before?.specification || '—'} →{' '}
+                                  {d.after?.specification || '—'}；供应 / 部门：
+                                  {d.before?.supplyType || '—'} /{' '}
+                                  {d.before?.issueDepartment || '—'} →{' '}
+                                  {d.after?.supplyType || '—'} /{' '}
+                                  {d.after?.issueDepartment || '—'}
+                                </small>
                                 <small className="npi-diff-path">
                                   {d.beforePath || '—'} → {d.afterPath || '—'}
                                 </small>
@@ -2476,6 +2603,7 @@ export function NpiWorkspace() {
           {meta?.actor.role === 'admin' &&
             (view === 'settings' || view === 'data') && (
               <NpiSettings
+                api={api}
                 key={view}
                 section={view === 'data' ? 'templates' : 'users'}
                 meta={meta}
@@ -2518,7 +2646,7 @@ export function NpiWorkspace() {
               (['technical', 'manufacturing'].includes(
                 meta?.actor.role || '',
               ) &&
-                meta?.actor.id === project.manufacturingOwnerId)
+                ownsWork(meta?.actor, project.manufacturingOwnerId))
             )
           }
           onClose={() => setManufacturingReplyOpen(false)}
@@ -2596,6 +2724,20 @@ export function NpiWorkspace() {
             setDashboard(nextDashboard)
             setNotice('BOM外物料已新增，责任人的待回复任务和齐套预测已更新')
             return item
+          }}
+        />
+      )}
+      {revisionRow && project && (
+        <NpiBomRevision
+          api={api}
+          project={project}
+          row={revisionRow}
+          rows={bom}
+          onClose={() => setRevisionRow(null)}
+          onSaved={async () => {
+            setNotice('BOM修订已生成新版本，请核对差异及待复核项')
+            await refresh()
+            await openProject(project.id, undefined, 'bom')
           }}
         />
       )}

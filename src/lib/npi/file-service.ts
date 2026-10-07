@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from './work-ownership'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -52,7 +53,7 @@ async function access(
     assignedMaterial =
       ['technical', 'manufacturing'].includes(actor.role) &&
       ['material', 'other'].includes(t.trackingType) &&
-      actor.id === t.ownerId
+      ownsWork(actor, t.ownerId)
     active = t.trackingEnabled || t.affectsKit
   } else if (scope.kind === 'issue') {
     const [r] = await run
@@ -66,14 +67,17 @@ async function access(
   }
   let project
   if (actor.role === 'procurement' || assignedMaterial) {
-    if (!assignedMaterial && (scope.kind === 'project' || actor.id !== ownerId))
+    if (
+      !assignedMaterial &&
+      (scope.kind === 'project' || !ownsWork(actor, ownerId || ''))
+    )
       return deny()
     const q = run
       .select()
       .from(s.npiProjects)
       .where(eq(s.npiProjects.programId, programId))
     ;[project] = edit ? await q.for('update') : await q
-    if (!project) return missing()
+    if (!project || project.deletedAt) return missing()
     // Assignment may have changed while the project lock was awaited.
 
     if (edit && project.currentNpiStage === 'completed')
@@ -98,9 +102,8 @@ async function access(
       active &&
       (actor.role === 'admin' ||
         (['technical', 'manufacturing'].includes(actor.role) &&
-          [project.technicalOwnerId, project.manufacturingOwnerId].includes(
-            actor.id,
-          ))),
+          (ownsWork(actor, project.technicalOwnerId) ||
+            ownsWork(actor, project.manufacturingOwnerId)))),
     canUpload:
       actor.role !== 'supervisor' &&
       project.currentNpiStage !== 'completed' &&

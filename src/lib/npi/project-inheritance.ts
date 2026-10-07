@@ -40,7 +40,7 @@ async function prepare(
     .from(projectRecords)
     .where(eq(projectRecords.id, sourceId))
     .for('update')
-  if (!source || !program)
+  if (!source || source.deletedAt || !program)
     throw new NpiError('PROGRAM_NOT_FOUND', '源项目不存在', 404)
   if (actor.role !== 'admin' && source.technicalOwnerId !== actor.id)
     throw new NpiError(

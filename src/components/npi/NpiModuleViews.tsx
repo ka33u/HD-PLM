@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from '../../lib/npi/work-ownership'
+import { projectTitle } from '../../lib/npi/project-identity'
 import { useMemo, useRef, useState } from 'react'
 import { nodeNames } from '../../lib/npi/domain'
 import {
@@ -152,7 +154,7 @@ export function NpiProjectLibrary({
               return (
                 <tr key={p.id}>
                   <td data-label="新品项目">
-                    <strong>{p.name}</strong>
+                    <strong>{projectTitle(p)}</strong>
                     {identity(p)}
                   </td>
                   <td data-label="阶段">{stageLabels[p.currentNpiStage]}</td>
@@ -232,7 +234,9 @@ export function NpiPreparationBoard({
     [purchaseOwner, setPurchaseOwner] = useState('all'),
     [arrival, setArrival] = useState<ArrivalWindow>('all'),
     [mine, setMine] = useState(
-      mode === 'manufacturing' && actor.role === 'manufacturing',
+      mode === 'manufacturing' &&
+        actor.role === 'manufacturing' &&
+        !actor.departmentId,
     )
   const start = useRef<HTMLDivElement>(null)
   const all = useMemo(
@@ -366,6 +370,35 @@ export function NpiPreparationBoard({
             </button>
           ))}
         </div>
+        {mode === 'purchasing' && (
+          <div className="npi-purchase-guide">
+            <p>
+              采购待办来自已分配给采购负责人的BOM物料或BOM外采购件。供应类型、领料部门不会自动分配责任人。
+            </p>
+            {dashboard.projects
+              .filter(
+                (p) =>
+                  p.activeBomImportId &&
+                  p.currentNpiStage !== 'completed' &&
+                  !p.items.some(
+                    (i) =>
+                      i.trackingType === 'purchase' &&
+                      (i.trackingEnabled || i.affectsKit),
+                  ),
+              )
+              .map((p) => (
+                <div key={p.id}>
+                  <span>{projectTitle(p)} · 尚未分配采购任务</span>{' '}
+                  <button
+                    className="npi-project-link"
+                    onClick={() => onOpen(p.id, 'bom')}
+                  >
+                    进入BOM分配采购 ↗
+                  </button>
+                </div>
+              ))}
+          </div>
+        )}
         <div className="npi-module-filters">
           <label>
             查找任务
@@ -487,10 +520,9 @@ export function NpiPreparationBoard({
               {pagination.items.map(({ project: p, item: i }) => (
                 <tr key={i.id} data-npi-task={i.id}>
                   <td data-label="项目 / 任务">
-                    <strong>{i.name}</strong>
-                    <small>
-                      {p.name} · {p.code}
-                    </small>
+                    <strong>{projectTitle(p)}</strong>
+                    <span className="npi-task-name">{i.name}</span>
+                    <small>项目编号：{p.code}</small>
                     {mode === 'purchasing' && (
                       <small>
                         {i.sourceType === 'ERP_BOM' ? 'ERP BOM' : 'BOM外采购件'}
@@ -518,7 +550,7 @@ export function NpiPreparationBoard({
                               (['technical', 'manufacturing'].includes(
                                 actor.role,
                               ) &&
-                                actor.id === p.manufacturingOwnerId))
+                                ownsWork(actor, p.manufacturingOwnerId)))
                           )
                             onReply(p.id)
                           else
@@ -537,7 +569,7 @@ export function NpiPreparationBoard({
                               (['technical', 'manufacturing'].includes(
                                 actor.role,
                               ) &&
-                                actor.id === p.manufacturingOwnerId))
+                                ownsWork(actor, p.manufacturingOwnerId)))
                             ? '集中回复'
                             : '查看制造准备'
                           : '查看采购物料'}{' '}
@@ -550,7 +582,7 @@ export function NpiPreparationBoard({
                           (['technical', 'manufacturing'].includes(
                             actor.role,
                           ) &&
-                            actor.id === p.manufacturingOwnerId)) && (
+                            ownsWork(actor, p.manufacturingOwnerId))) && (
                           <button
                             className="npi-project-link"
                             onClick={() => onComplete(p.id)}
@@ -598,11 +630,7 @@ export function NpiReports({
       searched.filter((p) => stage === 'all' || p.currentNpiStage === stage),
     [searched, stage],
   )
-  const completed = useMemo(
-    () => projects.filter((p) => p.currentNpiStage === 'completed'),
-    [projects],
-  )
-  const completedPage = usePagination(completed, 25, completeStart)
+  const completedPage = usePagination(projects, 25, completeStart)
   const metrics = dashboardMetrics(projects, dashboard.todayActivity.day)
   const ids = new Set(projects.map((p) => p.id))
   const scoped = {
@@ -694,7 +722,8 @@ export function NpiReports({
           <table className="npi-table npi-tracking-table">
             <thead>
               <tr>
-                <th>已完成项目</th>
+                <th>项目清单</th>
+                <th>阶段</th>
                 <th>样机要求</th>
                 <th>样机实际</th>
                 <th>完成结果</th>
@@ -705,36 +734,41 @@ export function NpiReports({
                 const completion = projectCompletion(p)
                 return (
                   <tr key={p.id}>
-                    <td data-label="已完成项目">
+                    <td data-label="项目清单">
                       <button
                         className="npi-project-link"
                         onClick={() => onOpen(p.id)}
                       >
-                        {p.name} ↗
+                        {projectTitle(p)} ↗
                       </button>
                       {identity(p)}
                     </td>
+                    <td data-label="阶段">{stageLabels[p.currentNpiStage]}</td>
                     <td data-label="样机要求">{p.prototypeRequiredDate}</td>
                     <td data-label="样机实际">
                       {completion.actualDate || '未记录'}
                     </td>
                     <td data-label="完成结果">
-                      {completion.onTime
-                        ? '按期完成'
-                        : completion.actualDate
-                          ? '晚于要求'
-                          : '待核对实际日期'}
+                      {p.currentNpiStage !== 'completed'
+                        ? '进行中'
+                        : completion.onTime
+                          ? '按期完成'
+                          : completion.actualDate
+                            ? '晚于要求'
+                            : '待核对实际日期'}
                     </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          {!projects.some((p) => p.currentNpiStage === 'completed') && (
-            <p className="npi-module-empty">当前范围尚无已完成项目。</p>
+          {!projects.length && (
+            <p className="npi-module-empty">
+              当前范围没有项目，请调整阶段或搜索条件。
+            </p>
           )}
         </div>
-        <NpiPagination label="完成项目报表分页" {...completedPage} />
+        <NpiPagination label="项目报表分页" {...completedPage} />
       </section>
       <NpiActivity
         dashboard={scoped}

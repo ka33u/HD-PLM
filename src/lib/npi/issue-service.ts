@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from './work-ownership'
 import { randomUUID } from 'node:crypto'
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { projects } from '../db/schema/projects'
 import { users } from '../db/schema/users'
@@ -37,6 +38,13 @@ const issueQuery = (run: TransactionClient | typeof db) =>
     })
     .from(s.npiIssues)
     .innerJoin(projects, eq(projects.id, s.npiIssues.programId))
+    .innerJoin(
+      s.npiProjects,
+      and(
+        eq(s.npiProjects.programId, projects.id),
+        sql`${s.npiProjects.deletedAt} is null`,
+      ),
+    )
     .innerJoin(users, eq(users.id, s.npiIssues.ownerId))
 const mapped = (r: Awaited<ReturnType<typeof issueQuery>>[number]) => ({
   ...r.issue,
@@ -55,13 +63,14 @@ async function access(
   const [r] = await issueQuery(run).where(eq(s.npiIssues.id, uuidValue(id)))
   if (!r) throw new NpiError('ISSUE_NOT_FOUND', '项目问题不存在', 404)
   if (actor.role === 'procurement') {
-    if (r.issue.ownerId !== actor.id) return forbidden()
+    if (!ownsWork(actor, r.issue.ownerId)) return forbidden()
     const q = run
       .select()
       .from(s.npiProjects)
       .where(eq(s.npiProjects.programId, r.issue.programId))
     const [p] = edit ? await q.for('update') : await q
-    if (!p) throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在', 404)
+    if (!p || p.deletedAt)
+      throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在或已移入回收站', 404)
     if (edit && p.currentNpiStage === 'completed')
       throw new NpiError('INVALID_STATE_TRANSITION', '已完成项目为只读', 400)
   } else await loadProject(run, r.issue.programId, actor, edit)
@@ -188,7 +197,9 @@ export async function listIssues(userId: string, projectId?: string) {
     .where(
       projectId
         ? eq(s.npiIssues.programId, projectId)
-        : eq(s.npiIssues.ownerId, actor.id),
+        : inArray(s.npiIssues.ownerId, [
+            ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+          ]),
     )
     .orderBy(desc(s.npiIssues.createdAt))
   return rows.map(mapped)

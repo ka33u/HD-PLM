@@ -66,6 +66,10 @@ async function prepare(
   if (!program) throw new Error('Missing project record')
   const profile = prepareProjectProfile(program, input)
   const next = {
+    code:
+      input.code === undefined
+        ? program.code
+        : textValue(input.code, '项目编号 / 订单编号', 50),
     name:
       input.name === undefined
         ? program.name
@@ -160,6 +164,7 @@ async function prepare(
     .orderBy(asc(users.id))
   const names = new Map(people.map((u) => [u.id, u.name || u.id]))
   const fields = [
+    ['code', '项目编号 / 订单编号', program.code, next.code],
     ['name', '新品名称', program.name, next.name],
     ['motorModel', '电机型号', project.motorModel, next.motorModel],
     [
@@ -286,7 +291,7 @@ export async function applyProjectChange(
       !r.issueChanges.length
     )
       return { version: r.project.version, canContinue: r.preview.canContinue }
-    const { name, ...next } = r.next
+    const { name, code, ...next } = r.next
     await tx
       .update(s.npiProjects)
       .set({ ...next, version: r.project.version + 1 })
@@ -296,6 +301,7 @@ export async function applyProjectChange(
       .set({
         ...r.profile.patch,
         name,
+        code,
         ...(next.prototypeRequiredDate !== r.project.prototypeRequiredDate
           ? {
               targetEndDate: new Date(
@@ -360,6 +366,7 @@ export async function applyProjectChange(
       actorName: r.actor.name,
       before: {
         name: r.program.name,
+        code: r.program.code,
         profile: r.profile.before,
         motorModel: r.project.motorModel,
         technicalOwnerId: r.project.technicalOwnerId,

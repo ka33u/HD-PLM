@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ownsWork } from '../../lib/npi/work-ownership'
+import { projectTitle } from '../../lib/npi/project-identity'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
@@ -69,7 +71,7 @@ export function NpiManufacturingException({
     if (
       snapshot.actor.role !== 'admin' &&
       (snapshot.actor.role !== 'manufacturing' ||
-        snapshot.actor.id !== snapshot.project.manufacturingOwnerId)
+        !ownsWork(snapshot.actor, snapshot.project.manufacturingOwnerId))
     )
       return '当前账号已不是本项目制造负责人，请交由现任负责人处理。'
     return ''
@@ -290,7 +292,7 @@ export function NpiManufacturingException({
       >
         <DialogTitle>添加制造异常件</DialogTitle>
         <DialogDescription>
-          {base && `${base.project.name} · ${base.project.code}。`}
+          {base && `${projectTitle(base.project)} · ${base.project.code}。`}
           从当前BOM选择物料，交项目制造负责人跟踪。预计完成日期、原因和齐套影响一并保存。
         </DialogDescription>
         {(error || message || latest) && (

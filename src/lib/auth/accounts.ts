@@ -2,7 +2,7 @@ import { hash, verify, Algorithm } from '@node-rs/argon2'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { accountEvents, sessions, users } from '../db/schema/users'
-import { npiUserRoles } from '../db/schema/npi'
+import { npiUserRoles, npiDepartments } from '../db/schema/npi'
 import { NpiError, textValue } from '../npi/domain'
 import { getActor, versionCheck } from '../npi/service'
 import type { TransactionClient } from '../db'
@@ -74,6 +74,7 @@ const fields = {
   lockedUntil: users.lockedUntil,
   createdAt: users.createdAt,
   role: npiUserRoles.role,
+  departmentId: npiUserRoles.departmentId,
 }
 export async function listAccounts(actorId: string) {
   await requireAdmin(actorId)
@@ -155,7 +156,15 @@ export async function updateAccount(
     await tx
       .insert(npiUserRoles)
       .values({ userId: targetId, role })
-      .onConflictDoUpdate({ target: npiUserRoles.userId, set: { role } })
+      .onConflictDoUpdate({
+        target: npiUserRoles.userId,
+        set: { role, ...(role !== target.role ? { departmentId: null } : {}) },
+      })
+    if (role !== target.role && target.departmentId)
+      await tx
+        .update(npiDepartments)
+        .set({ version: sql`${npiDepartments.version}+1` })
+        .where(eq(npiDepartments.id, target.departmentId))
     if (!active || role !== target.role || email !== target.email)
       await tx.delete(sessions).where(eq(sessions.userId, targetId))
     await tx.insert(accountEvents).values({

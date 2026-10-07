@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const eventLabels: Record<string, string> = {
+  PROJECT_TRASHED: '项目移入回收站',
+  PROJECT_RESTORED: '恢复项目',
   PROJECT_CREATED: '创建新品项目',
   PROJECT_CHANGED: '调整项目计划与负责人',
   DOCUMENT_SPACE_CREATED: '建立项目资料空间',
@@ -17,6 +19,8 @@ export const eventLabels: Record<string, string> = {
   MANUFACTURING_EXCEPTION_REPORTED: '添加制造异常件',
   MANUFACTURING_PLAN_REPLIED: '集中回复制造计划',
   STAGE_CHANGED: '推进项目阶段',
+  BOM_REVISED: '在线修订BOM',
+  BOM_TRACKING_CARRIED: '延续未变物料跟踪',
   BOM_IMPORTED: '导入BOM新版本',
   PROJECT_INHERITED: '从相似项目继承配置',
   BOM_DRAFT_SAVED: '保存BOM草稿',
@@ -45,6 +49,8 @@ export const eventGroups = {
     label: 'BOM与物料跟踪',
     actions: [
       'BOM_IMPORTED',
+      'BOM_REVISED',
+      'BOM_TRACKING_CARRIED',
       'BOM_DRAFT_SAVED',
       'BOM_DRAFT_UPDATED',
       'BOM_DRAFT_RESUMED',
@@ -61,6 +67,8 @@ export const eventGroups = {
     label: '项目与阶段',
     actions: [
       'PROJECT_CREATED',
+      'PROJECT_TRASHED',
+      'PROJECT_RESTORED',
       'PROJECT_CHANGED',
       'PROJECT_INHERITED',
       'STAGE_CHANGED',

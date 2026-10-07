@@ -107,6 +107,15 @@ export function NpiProjectChange({
             <form onSubmit={(e) => void review(e)}>
               <div className="npi-form-grid">
                 <label>
+                  项目编号 / 订单编号
+                  <input
+                    name="code"
+                    defaultValue={fieldValue('code', project.code)}
+                    maxLength={50}
+                    required
+                  />
+                </label>
+                <label>
                   新品名称
                   <input
                     name="name"
@@ -182,6 +191,15 @@ export function NpiProjectChange({
                 <details className="wide">
                   <summary>客户与电机参数（可选）</summary>
                   <div className="npi-form-grid">
+                    <label>
+                      项目编号 / 订单编号
+                      <input
+                        name="code"
+                        defaultValue={fieldValue('code', project.code)}
+                        maxLength={50}
+                        required
+                      />
+                    </label>
                     {profileFields.map((field) => (
                       <label
                         key={field.key}

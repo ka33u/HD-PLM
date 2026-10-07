@@ -66,6 +66,25 @@ export function NpiTrackingHistory({
                 {bomReferenceLabel(data.item.bomReference)}
               </p>
             )}
+            {data.bomChange && (
+              <div className="npi-preview">
+                <h3>BOM换版对照</h3>
+                <p>
+                  原物料：{data.bomChange.before.code} ·{' '}
+                  {data.bomChange.before.name} ·{' '}
+                  {data.bomChange.before.specification || '无规格'} ·{' '}
+                  {data.bomChange.before.qty} {data.bomChange.before.unit}
+                </p>
+                <p>
+                  {data.bomChange.after
+                    ? `${data.bomChange.type === 'CODE_CHANGED' ? '同位置候选新物料（待技术确认）' : '新版物料'}：${data.bomChange.after.code} · ${data.bomChange.after.name} · ${data.bomChange.after.specification || '无规格'} · ${data.bomChange.after.qty} ${data.bomChange.after.unit}`
+                    : '当前BOM已无此物料。'}
+                </p>
+                <p>
+                  复核前沿用原任务及承诺，请与技术负责人核对。编码替换不自动继承旧承诺。
+                </p>
+              </div>
+            )}
             <p>
               首次承诺：{data.item.firstCommittedDate || '尚未回复'}
               <br />

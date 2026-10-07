@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import {
+  listDepartments,
+  saveDepartment,
+} from '../../lib/npi/department-service'
+import {
+  trashedProjects,
+  changeProjectTrash,
+} from '../../lib/npi/project-trash'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
   inheritProject,
   previewInheritance,
 } from '../../lib/npi/project-inheritance'
+import { reviseBom } from '../../lib/npi/bom-revision-service'
 import * as drafts from '../../lib/npi/bom-draft-service'
 import {
   applyProjectChange,
@@ -158,6 +167,24 @@ app.post('/file-archive/:id', async (c) =>
       await c.req.json(),
     ),
   ),
+)
+app.get('/project-trash', async (c) =>
+  c.json(await trashedProjects(c.get('userId'))),
+)
+app.post('/projects/:id/trash', async (c) =>
+  c.json(
+    await changeProjectTrash(
+      c.get('userId'),
+      c.req.param('id'),
+      await c.req.json(),
+    ),
+  ),
+)
+app.get('/departments', async (c) =>
+  c.json(await listDepartments(c.get('userId'))),
+)
+app.post('/departments', async (c) =>
+  c.json(await saveDepartment(c.get('userId'), await c.req.json())),
 )
 app.get('/meta', async (c) => c.json(await npi.metadata(c.get('userId'))))
 app.get('/dashboard', async (c) => c.json(await npi.dashboard(c.get('userId'))))
@@ -370,6 +397,13 @@ app.post('/projects/:id/bom/import', async (c) =>
     201,
   ),
 )
+app.post('/projects/:id/bom/revisions', async (c) =>
+  c.json(
+    await reviseBom(c.get('userId'), c.req.param('id'), await c.req.json()),
+    201,
+  ),
+)
+
 app.get('/projects/:id/bom/tree', async (c) => {
   const values = c.req.queries('trackingOnly') ?? []
   if (

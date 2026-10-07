@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { requestId as createRequestId } from '../../lib/request-id'
 import { useEffect, useRef, useState } from 'react'
 import {
   Dialog,
@@ -129,7 +130,7 @@ export function NpiExternalMaterial({
     attempt.current = {
       openFiles: submitter?.value === 'files',
       data: {
-        requestId: crypto.randomUUID(),
+        requestId: createRequestId(),
         name: data.get('name'),
         specification: data.get('specification'),
         qty: data.get('qty'),

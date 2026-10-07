@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { requestId as createRequestId } from '../../lib/request-id'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Dialog,
@@ -554,7 +555,7 @@ export function NpiIssues({
                       noteRequest.current = {
                         issueId: detail.id,
                         message,
-                        requestId: crypto.randomUUID(),
+                        requestId: createRequestId(),
                       }
                     void mutation(
                       `/issues/${detail.id}/notes`,

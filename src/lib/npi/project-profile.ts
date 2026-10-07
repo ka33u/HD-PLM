@@ -2,6 +2,7 @@
 import { NpiError, textValue } from './domain'
 
 export const profileFields = [
+  { key: 'motorCode', label: '电机编码', max: 100, kind: 'text' },
   { key: 'customer', label: '客户', max: 200, kind: 'text' },
   { key: 'application', label: '用途 / 应用场景', max: 500, kind: 'text' },
   { key: 'ratedPowerKw', label: '额定功率（kW）', max: 19, kind: 'decimal' },
@@ -29,6 +30,7 @@ const display = (value: unknown) =>
 export function readProjectProfile(program?: StoredProfile): ProjectProfile {
   const motor = record(record(program?.attributes).npiMotorSpec)
   return {
+    motorCode: display(motor.motorCode),
     customer: program?.customer || '',
     description: program?.description || '',
     application: display(motor.application),

@@ -1,5 +1,6 @@
-import { AccountManager } from '../accounts/AccountManager'
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { NpiDepartments } from './NpiDepartments'
+import { AccountManager } from '../accounts/AccountManager'
 import { useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Plus } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs'
@@ -13,11 +14,13 @@ const compare = (a: string, b: string) =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 export function NpiSettings({
   meta,
+  api,
   onTemplate,
   section = 'all',
 }: {
   section?: 'all' | 'templates' | 'users'
   meta: NpiMetadata
+  api: <T>(path: string, method?: string, data?: unknown) => Promise<T>
   onTemplate: (template?: Template) => void
 }) {
   const [templateQuery, setTemplateQuery] = useState('')
@@ -169,6 +172,7 @@ export function NpiSettings({
           )}
         </TabsContent>
         <TabsContent value="users">
+          <NpiDepartments api={api} />
           <AccountManager embedded />
         </TabsContent>
       </Tabs>

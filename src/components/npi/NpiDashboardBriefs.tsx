@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { projectTitle } from '../../lib/npi/project-identity'
 import { useMemo, useRef, useState } from 'react'
 import { NpiPagination, usePagination } from './NpiPagination'
 import type { NpiDashboard } from '../../lib/npi/service'
@@ -180,8 +181,8 @@ export function NpiDashboardBriefs({
               id: i.id,
               projectId: p.id,
               itemId: i.id,
-              title: `${p.name} · ${i.name}`,
-              search: `${p.name} ${p.code} ${p.motorModel} ${i.name} ${i.ownerName}`,
+              title: `${projectTitle(p)} · ${i.name}`,
+              search: `${projectTitle(p)} ${p.code} ${p.motorModel} ${i.name} ${i.ownerName}`,
               status: i.status,
               detail: `${i.ownerName || '未指定责任人'} · ${i.status === 'overdue' ? '承诺已逾期' : '等待回复'}`,
               date: `要求 ${i.requiredDate} · 承诺 ${i.currentCommittedDate || '待回复'}`,
@@ -219,9 +220,9 @@ export function NpiDashboardBriefs({
           return {
             id: p.id,
             projectId: p.id,
-            title: p.name,
+            title: projectTitle(p),
             status: p.riskStatus,
-            search: `${p.name} ${p.code} ${p.motorModel} ${detail} ${p.kit.bottleneck?.name || ''} ${p.kit.bottleneck?.ownerName || ''}`,
+            search: `${projectTitle(p)} ${p.code} ${p.motorModel} ${detail} ${p.kit.bottleneck?.name || ''} ${p.kit.bottleneck?.ownerName || ''}`,
             detail,
             date: `样机要求 ${p.prototypeRequiredDate} · ${p.riskStatus === 'overdue' ? '逾期' : '风险'}`,
           }

@@ -920,7 +920,7 @@ try {
       'technical',
       `/projects/${p.id}/bom/reconciliation`,
     )
-    assert.equal(review.items[0].changeType, 'REMOVED')
+    assert.equal(review.items[0].changeType, 'CODE_CHANGED')
     assert.equal(review.items[0].candidates.length, 0)
     const body = {
       action: 'retire',
@@ -1025,8 +1025,7 @@ try {
     assert.notEqual(next.kit.bottleneck?.id, trackingId)
   })
   await test('Project issue creation is atomic, scoped and visible in critical project risk', async () => {
-    const before =
-      await client`select count(*)::int as count from npi_issues`
+    const before = await client`select count(*)::int as count from npi_issues`
     await call(
       'technical',
       `/projects/${projectId}/issues`,
@@ -1041,8 +1040,7 @@ try {
       },
       422,
     )
-    const after =
-      await client`select count(*)::int as count from npi_issues`
+    const after = await client`select count(*)::int as count from npi_issues`
     assert.equal(after[0]!.count, before[0]!.count)
     const result = await call(
       'technical',
@@ -1620,7 +1618,9 @@ try {
     )
     assert.equal((await detail()).currentNpiStage, 'test')
     assert.notEqual(
-      (await client`select current_npi_stage as status from npi_projects where program_id=${p.id}`)[0]!.status,
+      (
+        await client`select current_npi_stage as status from npi_projects where program_id=${p.id}`
+      )[0]!.status,
       'completed',
     )
     await call('procurement', `/tracking/${purchase.id}/complete`, 'POST', {
@@ -1635,7 +1635,9 @@ try {
     assert.equal(closed.currentNpiStage, 'completed')
     assert.equal(closed.drawingCompleteDate, date)
     assert.equal(
-      (await client`select current_npi_stage as status from npi_projects where program_id=${p.id}`)[0]!.status,
+      (
+        await client`select current_npi_stage as status from npi_projects where program_id=${p.id}`
+      )[0]!.status,
       'completed',
     )
     assert.equal(
@@ -2415,8 +2417,12 @@ try {
       proposal,
     )
     const beforeFailure = await detail()
-    await client.unsafe(`create function test_issue_failure() returns trigger language plpgsql as $$ begin if new.id = '${issue.id}'::uuid then raise exception 'Synthetic issue update failure'; end if; return new; end $$`)
-    await client.unsafe('create trigger test_issue_failure before update on npi_issues for each row execute function test_issue_failure()')
+    await client.unsafe(
+      `create function test_issue_failure() returns trigger language plpgsql as $$ begin if new.id = '${issue.id}'::uuid then raise exception 'Synthetic issue update failure'; end if; return new; end $$`,
+    )
+    await client.unsafe(
+      'create trigger test_issue_failure before update on npi_issues for each row execute function test_issue_failure()',
+    )
     try {
       await call(
         'technical',
@@ -2605,6 +2611,7 @@ try {
       path = `/projects/${p.id}`
     const original = await call('technical', path)
     assert.deepEqual(original.profile, {
+      motorCode: '',
       customer: '协同机电',
       application: '轴流风机',
       ratedPowerKw: '7.5',
@@ -2762,8 +2769,7 @@ try {
   })
   await test('Today dashboard uses all scoped audit rows, excludes first promises and compares overdue with the previous business day', async () => {
     const { today } = await import('../src/lib/npi/domain')
-    const { businessDayRange } =
-      await import('../src/lib/npi/activity')
+    const { businessDayRange } = await import('../src/lib/npi/activity')
     const day = today(),
       range = businessDayRange(day)
     const date = (offset: number) =>

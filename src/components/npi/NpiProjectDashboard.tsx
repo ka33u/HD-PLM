@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { projectTitle } from '../../lib/npi/project-identity'
 import { useMemo, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import {
@@ -139,7 +140,7 @@ export function NpiProjectDashboard({
                     className="npi-project-link"
                     onClick={() => onOpen(p.id)}
                   >
-                    {p.name}
+                    {projectTitle(p)}
                     <ChevronRight size={15} />
                   </button>
                   <small>
