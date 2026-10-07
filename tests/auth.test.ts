@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { eq } from 'drizzle-orm'
 if (
@@ -62,6 +63,16 @@ let member = '',
   memberToken = '',
   memberPassword = ''
 try {
+  await test('Health reports the package version without requiring a login', async () => {
+    const response = await app.request(base + '/api/health')
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), {
+      status: 'ok',
+      application: 'hd-plm',
+      version: manifest.version,
+    })
+  })
   await test('Login uses one hashed session, strict HttpOnly cookies, normalized email and no password exposure', async () => {
     const { response, data } = await login(email.toUpperCase(), password)
     assert.equal(response.status, 200)

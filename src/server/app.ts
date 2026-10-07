@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { sql } from 'drizzle-orm'
+import manifest from '../../package.json' with { type: 'json' }
 import { db } from '../lib/db'
 import { NpiError } from '../lib/npi/domain'
 import auth from './routes/auth'
@@ -91,7 +92,7 @@ app.get('/api/health', async (c) => {
   return c.json({
     status: 'ok',
     application: 'hd-plm',
-    version: '2.1.0',
+    version: manifest.version,
   })
 })
 app.all('/api/*', (c) =>
