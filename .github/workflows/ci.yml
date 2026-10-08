@@ -51,3 +51,4 @@ jobs:
       - run: npm run test:accounts-browser
       - run: npm run test:setup-browser
       - run: npm run test:issue-1
+      - run: npm run test:trash

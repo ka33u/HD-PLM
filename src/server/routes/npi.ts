@@ -6,6 +6,8 @@ import {
 import {
   trashedProjects,
   changeProjectTrash,
+  trashedProjectDetail,
+  restoreTrashedProjects,
 } from '../../lib/npi/project-trash'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -170,6 +172,12 @@ app.post('/file-archive/:id', async (c) =>
 )
 app.get('/project-trash', async (c) =>
   c.json(await trashedProjects(c.get('userId'))),
+)
+app.get('/project-trash/:id', async (c) =>
+  c.json(await trashedProjectDetail(c.get('userId'), c.req.param('id'))),
+)
+app.post('/project-trash/restore', async (c) =>
+  c.json(await restoreTrashedProjects(c.get('userId'), await c.req.json())),
 )
 app.post('/projects/:id/trash', async (c) =>
   c.json(

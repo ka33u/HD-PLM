@@ -10,6 +10,8 @@ src/lib/npi → 项目、BOM、承诺、齐套、问题、附件及审计
 src/lib/db/schema → 19 张独立数据表
 ```
 
+项目回收站使用独立页面 `/npi/trash`，由现有软删除字段和项目审计记录构成，无需增加表。列表和详情都按管理员 / 技术负责人归属过滤；详情仅返回资料数量及最近 20 条删除恢复记录，不开放已删除项目的业务写入。批量恢复接口 `/api/v1/npi/project-trash/restore` 上限 50 项，按项目 ID 固定顺序加行锁，在一个事务中校验所有版本、恢复项目并逐项写审计，冲突时整体回滚。
+
 `projects` 保存项目身份和参数，`npi_projects` 保存排程和当前 BOM 基线。既有 API 的 `programId` 字段继续作为项目 UUID 使用，以保留业务数据及关联身份。它不依赖旧 Program 服务。问题完全保存在 `npi_issues` / `npi_issue_history`，附件完全保存在 `npi_attachments` 与独立文件目录。
 
 ## 账号与权限

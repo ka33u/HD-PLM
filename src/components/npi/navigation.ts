@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const moduleInfo = {
+  trash: {
+    label: '项目回收站',
+    title: '项目回收站',
+    description: '查看删除记录，恢复项目及原有资料。',
+  },
   dashboard: {
     label: '首页',
     title: '新品驾驶舱',

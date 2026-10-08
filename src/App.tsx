@@ -19,7 +19,9 @@ function Login() {
         email: f.get('email'),
         password: f.get('password'),
       })
-      location.assign('/npi')
+      location.assign(
+        location.pathname === '/npi/trash' ? '/npi/trash' : '/npi',
+      )
     } catch (error) {
       setError(error instanceof Error ? error.message : '登录失败')
       setBusy(false)

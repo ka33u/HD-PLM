@@ -31,6 +31,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Upload,
+  Trash2,
 } from 'lucide-react'
 import {
   Dialog,
@@ -92,6 +93,7 @@ import type { FormEvent, ReactNode } from 'react'
 import './npi.css'
 
 const moduleIcons = {
+  trash: Trash2,
   dashboard: LayoutDashboard,
   projects: FolderKanban,
   bom: FileSpreadsheet,
@@ -169,6 +171,11 @@ const subscribeCompactBom = (notify: () => void) => {
 }
 const compactBomSnapshot = () => window.matchMedia(compactBomQuery).matches
 const desktopBomSnapshot = () => false
+const locationModule = (): ModuleId | null => {
+  if (window.location.pathname === '/npi/trash') return 'trash'
+  const view = new URLSearchParams(window.location.search).get('view')
+  return view && Object.hasOwn(moduleInfo, view) ? (view as ModuleId) : null
+}
 
 export function NpiWorkspace() {
   const compactBom = useSyncExternalStore(
@@ -181,7 +188,9 @@ export function NpiWorkspace() {
     [dashboard, setDashboard] = useState<NpiDashboard | null>(null)
   const [purchases, setPurchases] = useState<Array<NpiTracking>>([]),
     [project, setProject] = useState<ProjectDetail | null>(null)
-  const [view, setView] = useState<ModuleId | 'project'>('dashboard'),
+  const [view, setView] = useState<ModuleId | 'project'>(
+      () => locationModule() || 'dashboard',
+    ),
     [returnView, setReturnView] = useState<ModuleId>('projects'),
     [search, setSearch] = useState(''),
     [tab, setTab] = useState('overview')
@@ -189,6 +198,7 @@ export function NpiWorkspace() {
     [notice, setNotice] = useState(''),
     [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false)
+  const [trashRevision, setTrashRevision] = useState(0)
   const [templateEditor, setTemplateEditor] = useState<TemplateDraft | null>(
     null,
   )
@@ -361,8 +371,24 @@ export function NpiWorkspace() {
           throw new Error('登录账号已改变，请整页刷新并核对未保存内容')
         const firstLoad = !actorId.current
         actorId.current = next.actor.id
-        if (firstLoad && next.actor.role === 'manufacturing')
-          setView('manufacturing')
+        if (firstLoad) {
+          const requested = locationModule()
+          const allowed = [
+            ...navigationFor(next.actor.role),
+            ...(['admin', 'technical'].includes(next.actor.role)
+              ? ['trash']
+              : []),
+          ]
+          setView(
+            requested && allowed.includes(requested)
+              ? requested
+              : next.actor.role === 'manufacturing'
+                ? 'manufacturing'
+                : next.actor.role === 'procurement'
+                  ? 'procurement'
+                  : 'dashboard',
+          )
+        }
         setMeta(next)
         const loadProjects = !configurationOnly || next.actor.role !== 'admin'
         if (next.actor.role === 'procurement') {
@@ -1187,7 +1213,7 @@ export function NpiWorkspace() {
       )}
     </div>
   )
-  const navigate = (next: ModuleId) => {
+  const navigate = useCallback((next: ModuleId, updateUrl = true) => {
     projectRequest.current++
     setBomLoading(null)
     setLoading(false)
@@ -1200,7 +1226,36 @@ export function NpiWorkspace() {
     setProject(null)
     projectId.current = null
     setError('')
-  }
+    if (updateUrl)
+      window.history.pushState(
+        null,
+        '',
+        next === 'trash' ? '/npi/trash' : `/npi?view=${next}`,
+      )
+  }, [])
+  useEffect(() => {
+    const restoreNavigation = () => {
+      const requested = locationModule() || 'dashboard'
+      const allowed = meta
+        ? [
+            ...navigationFor(meta.actor.role),
+            ...(['admin', 'technical'].includes(meta.actor.role)
+              ? ['trash']
+              : []),
+          ]
+        : []
+      navigate(
+        allowed.includes(requested)
+          ? requested
+          : meta?.actor.role === 'procurement'
+            ? 'procurement'
+            : 'dashboard',
+        false,
+      )
+    }
+    window.addEventListener('popstate', restoreNavigation)
+    return () => window.removeEventListener('popstate', restoreNavigation)
+  }, [meta, navigate])
   return (
     <div className="npi-app">
       <aside className="npi-sidebar">
@@ -1229,6 +1284,16 @@ export function NpiWorkspace() {
               </button>
             )
           })}
+          {meta && ['admin', 'technical'].includes(meta.actor.role) && (
+            <button
+              className={`npi-trash-nav ${view === 'trash' ? 'active' : ''}`}
+              aria-current={view === 'trash' ? 'page' : undefined}
+              onClick={() => navigate('trash')}
+            >
+              <Trash2 size={19} />
+              项目回收站
+            </button>
+          )}
         </nav>
         <div className="npi-sidebar-bottom">
           <span>制造统筹 · 承诺可追溯</span>
@@ -1268,7 +1333,10 @@ export function NpiWorkspace() {
           <button
             className="npi-button secondary"
             disabled={loading}
-            onClick={() => void refresh(view === 'settings' || view === 'data')}
+            onClick={() => {
+              if (view === 'trash') setTrashRevision((n) => n + 1)
+              void refresh(view === 'settings' || view === 'data')
+            }}
           >
             <RefreshCw size={16} className={loading ? 'npi-spin' : ''} />
             刷新
@@ -1298,7 +1366,8 @@ export function NpiWorkspace() {
           {meta &&
             view !== 'project' &&
             view !== 'settings' &&
-            view !== 'data' && (
+            view !== 'data' &&
+            view !== 'trash' && (
               <div className="npi-heading">
                 <div>
                   <div className="npi-eyebrow">NEW PRODUCT INTRODUCTION</div>
@@ -1308,7 +1377,13 @@ export function NpiWorkspace() {
                 {['admin', 'technical'].includes(meta.actor.role) &&
                   ['dashboard', 'projects', 'bom'].includes(view) && (
                     <div className="npi-actions">
-                      <NpiProjectTrash api={api} onChanged={() => refresh()} />
+                      <button
+                        className="npi-button secondary"
+                        onClick={() => navigate('trash')}
+                      >
+                        <Trash2 size={16} />
+                        项目回收站
+                      </button>
                       <button className="npi-button" onClick={showCreate}>
                         <Plus size={18} />
                         新建新品
@@ -1319,7 +1394,9 @@ export function NpiWorkspace() {
             )}
           {meta &&
             !dashboard &&
-            !['project', 'data', 'settings', 'procurement'].includes(view) &&
+            !['project', 'data', 'settings', 'procurement', 'trash'].includes(
+              view,
+            ) &&
             loading && (
               <p role="status" className="npi-module-empty">
                 正在读取业务数据…
@@ -1335,6 +1412,18 @@ export function NpiWorkspace() {
               onCreate={showCreate}
             />
           )}
+          {meta &&
+            view === 'trash' &&
+            ['admin', 'technical'].includes(meta.actor.role) && (
+              <NpiProjectTrash
+                api={api}
+                role={meta.actor.role}
+                revision={trashRevision}
+                onChanged={() => refresh()}
+                onBack={() => navigate('projects')}
+                onOpen={(id) => void openProject(id)}
+              />
+            )}
           {meta && dashboard && (view === 'projects' || view === 'bom') && (
             <NpiProjectLibrary
               key={view}

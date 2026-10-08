@@ -451,6 +451,17 @@ try {
     await call('technical', `/projects/${projectId}`, 'GET', undefined, 404)
     const rows = await call('technical', '/project-trash')
     assert.equal(rows.length, 1)
+    const deletedDetail = await call('technical', `/project-trash/${projectId}`)
+    assert.ok(deletedDetail.counts.bomVersions > 0)
+    assert.ok(deletedDetail.counts.trackingItems > 0)
+    assert.equal(deletedDetail.project.deletedByName, '验证-technical')
+    await call(
+      'otherTech',
+      `/project-trash/${projectId}`,
+      'GET',
+      undefined,
+      404,
+    )
     const restore = {
       action: 'restore',
       expectedVersion: rows[0].version,
