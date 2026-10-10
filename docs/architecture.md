@@ -53,3 +53,11 @@ src/lib/db/schema → 19 张独立数据表
 技术负责人或管理员可编辑物料资料，或移除物料及下级。接口锁定项目并校验当前版本，生成新的不可变 BOM 和对应 Excel，保留原始导入文件。仅位置、编码、数量和业务资料均未变的行延续原任务；发生变化的旧跟踪保持原记录并进入复核。编码替换对照只作为候选，不能直接把旧承诺迁移给不同编码。
 
 局域网 HTTP 下的请求编号使用 `crypto.getRandomValues` 生成 UUID，不依赖只在安全上下文可用的 `crypto.randomUUID`；服务端认证令牌仍独立生成。
+
+## 部件快速回复
+
+`GET /api/v1/npi/workbench/quick-replies?kind=manufacturing|procurement` 返回当前岗位本人 / 同部门待办，可用 `projectId` 缩小范围；管理员可读取所有已分配部件，主管禁止访问。采购权限不扩展到全项目或全 BOM。
+
+`POST /api/v1/npi/tracking/batch-reply` 接收 `operation`（`promise` / `complete`）、可选统一 `reason` 和最多 50 个 `{id, expectedVersion, date, reason?}`。按项目 UUID 排序锁项目，再按物料 UUID 排序锁物料，逐行核验当前账号、归属、项目状态、当前 BOM 和版本。复用单项承诺 / 完成写入及逐项审计，一项失败则整批回滚。制造四节点继续使用原节点回复；快速接口仅接受 BOM 与 BOM 外部件。
+
+前端草稿按跟踪 UUID 关联，不用物料编码或表格序号匹配；重复编码显示 BOM 版本和行号。失败保留原始版本与填写，重新读取不会自动提升草稿版本，用户必须核对冲突后明确保留。响应丢失后重新读取，以服务器日期为准核对；已匹配的日期不再作为改动重交。

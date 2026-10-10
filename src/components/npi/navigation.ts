@@ -23,8 +23,7 @@ export const moduleInfo = {
   manufacturing: {
     label: '制造准备',
     title: '制造准备',
-    description:
-      '集中跟进工艺、工装、零部件齐套和样机装配，回复日期并确认完成。',
+    description: '跟进工艺、工装、齐套和装配；部件日期可连续填写、批量回复。',
   },
   purchasing: {
     label: '采购管理',
@@ -49,7 +48,8 @@ export const moduleInfo = {
   procurement: {
     label: '采购管理',
     title: '我的采购任务',
-    description: '回复本人采购件交期、说明改期原因、确认到货。',
+    description:
+      '处理本人及同部门采购件，批量回复交期、说明改期原因、确认到货。',
   },
 } as const
 export type ModuleId = keyof typeof moduleInfo

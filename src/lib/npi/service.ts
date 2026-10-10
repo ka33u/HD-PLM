@@ -738,11 +738,27 @@ export async function procurement(userId: string) {
 export async function assignedMaterials(userId: string) {
   return personalMaterials(userId, true)
 }
-async function personalMaterials(userId: string, assigned: boolean) {
+async function personalMaterials(
+  userId: string,
+  assigned: boolean,
+  quick = false,
+) {
   return db.transaction(
     async (tx) => {
       const actor = await getActor(userId, tx)
-      if (assigned && !['technical', 'manufacturing'].includes(actor.role))
+      if (
+        quick &&
+        ![
+          'admin',
+          ...(assigned ? ['technical', 'manufacturing'] : ['procurement']),
+        ].includes(actor.role)
+      )
+        return denied()
+      if (
+        assigned &&
+        !['technical', 'manufacturing'].includes(actor.role) &&
+        !(quick && actor.role === 'admin')
+      )
         return denied()
       const types = assigned ? ['material', 'other'] : ['purchase']
       const rows = await tx
@@ -778,9 +794,11 @@ async function personalMaterials(userId: string, assigned: boolean) {
         )
         .where(
           and(
-            inArray(s.npiTrackingItems.ownerId, [
-              ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
-            ]),
+            quick && actor.role === 'admin'
+              ? undefined
+              : inArray(s.npiTrackingItems.ownerId, [
+                  ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+                ]),
             isNull(s.npiProjects.deletedAt),
             inArray(s.npiTrackingItems.trackingType, types),
           ),
@@ -798,9 +816,11 @@ async function personalMaterials(userId: string, assigned: boolean) {
         )
         .where(
           and(
-            inArray(s.npiTrackingItems.ownerId, [
-              ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
-            ]),
+            quick && actor.role === 'admin'
+              ? undefined
+              : inArray(s.npiTrackingItems.ownerId, [
+                  ...new Set([actor.id, ...(actor.collaboratorIds || [])]),
+                ]),
             inArray(s.npiTrackingItems.trackingType, types),
           ),
         )
@@ -833,6 +853,28 @@ async function personalMaterials(userId: string, assigned: boolean) {
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
   )
+}
+export async function quickReplyItems(
+  userId: string,
+  input: Record<string, string | undefined>,
+) {
+  if (!['manufacturing', 'procurement'].includes(input.kind || ''))
+    throw new NpiError('VALIDATION_ERROR', '请选择生产或采购部件')
+  const projectId = input.projectId ? uuidValue(input.projectId) : null
+  const result = await personalMaterials(
+    userId,
+    input.kind === 'manufacturing',
+    true,
+  )
+  return {
+    ...result,
+    items: result.items.filter(
+      (item) =>
+        (!projectId || item.programId === projectId) &&
+        !item.actualCompleteDate &&
+        item.currentNpiStage !== 'completed',
+    ),
+  }
 }
 export async function trackingHistory(userId: string, id: string) {
   return db.transaction(
@@ -1433,6 +1475,117 @@ export async function completeItem(
     return { ...result, status: 'completed' }
   })
 }
+export async function batchReplyMaterials(
+  userId: string,
+  input: Record<string, unknown>,
+) {
+  if (!['promise', 'complete'].includes(String(input.operation)))
+    throw new NpiError('VALIDATION_ERROR', '请选择回复日期或确认实际完成')
+  if (
+    !Array.isArray(input.items) ||
+    !input.items.length ||
+    input.items.length > 50
+  )
+    throw new NpiError('VALIDATION_ERROR', '每次提交1至50个部件')
+  const commonReason = textValue(input.reason, '统一改期原因', 2000, true)
+  const changes = input.items
+    .map((value: unknown) => {
+      if (!value || typeof value !== 'object')
+        throw new NpiError('VALIDATION_ERROR', '部件参数无效')
+      const row = value as Record<string, unknown>
+      return {
+        id: uuidValue(row.id),
+        expectedVersion: row.expectedVersion,
+        date: dateValue(row.date, '回复日期')!,
+        reason: textValue(row.reason, '改期原因', 2000, true) || commonReason,
+      }
+    })
+    .sort((a, b) => a.id.localeCompare(b.id))
+  if (new Set(changes.map((r) => r.id)).size !== changes.length)
+    throw new NpiError('VALIDATION_ERROR', '同一部件不能重复提交')
+  return db.transaction(async (tx) => {
+    const actor = await getActor(userId, tx, true)
+    if (actor.role === 'supervisor') return denied()
+    const lookups = await tx
+      .select({
+        id: s.npiTrackingItems.id,
+        projectId: s.npiTrackingItems.programId,
+      })
+      .from(s.npiTrackingItems)
+      .where(
+        inArray(
+          s.npiTrackingItems.id,
+          changes.map((r) => r.id),
+        ),
+      )
+    if (lookups.length !== changes.length)
+      throw new NpiError(
+        'TRACKING_ITEM_NOT_FOUND',
+        '部件已变化，请重新读取后核对',
+        404,
+      )
+    // Lock projects in a stable order before locking items, matching all single-item writes.
+    await tx
+      .select({ id: s.npiProjects.programId })
+      .from(s.npiProjects)
+      .where(
+        inArray(s.npiProjects.programId, [
+          ...new Set(lookups.map((r) => r.projectId)),
+        ]),
+      )
+      .orderBy(asc(s.npiProjects.programId))
+      .for('update')
+    const results = []
+    for (const change of changes) {
+      const { a, item, p } = await editableItem(tx, userId, change.id)
+      if (item.sourceType === 'MANUFACTURING')
+        throw new NpiError('VALIDATION_ERROR', '制造节点请在节点计划中回复')
+      if (item.actualCompleteDate)
+        throw new NpiError(
+          'VERSION_CONFLICT',
+          `${item.name}已完成，请重新读取后核对`,
+          409,
+        )
+      if (item.bomItemId) {
+        const [bom] = await tx
+          .select({ importId: s.npiBomItems.importId })
+          .from(s.npiBomItems)
+          .where(eq(s.npiBomItems.id, item.bomItemId))
+        if (!bom || bom.importId !== p.activeBomImportId)
+          throw new NpiError(
+            'BOM_REVIEW_REQUIRED',
+            `${item.name}的BOM已换版，请先由项目负责人复核`,
+            409,
+          )
+      }
+      versionCheck(item.version, change.expectedVersion)
+      try {
+        const result =
+          input.operation === 'promise'
+            ? await writePromise(tx, a, item, {
+                expectedVersion: change.expectedVersion,
+                committedDate: change.date,
+                reason: change.reason,
+              })
+            : await writeCompletion(tx, a, item, p, {
+                expectedVersion: change.expectedVersion,
+                actualCompleteDate: change.date,
+              })
+        results.push({ ...result, status: itemStatus(result) })
+      } catch (error) {
+        if (error instanceof NpiError)
+          throw new NpiError(
+            error.code,
+            `${item.name}：${error.message}`,
+            error.status,
+          )
+        throw error
+      }
+    }
+    return { actorId: actor.id, items: results }
+  })
+}
+export type QuickReplyItems = Awaited<ReturnType<typeof quickReplyItems>>
 export async function manufacturingPlan(
   userId: string,
   id: string,

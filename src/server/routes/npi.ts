@@ -288,6 +288,12 @@ app.post('/projects/:id/external-items', async (c) =>
 app.get('/tracking/:id/history', async (c) =>
   c.json(await npi.trackingHistory(c.get('userId'), c.req.param('id'))),
 )
+app.get('/workbench/quick-replies', async (c) =>
+  c.json(await npi.quickReplyItems(c.get('userId'), c.req.query())),
+)
+app.post('/tracking/batch-reply', async (c) =>
+  c.json(await npi.batchReplyMaterials(c.get('userId'), await c.req.json())),
+)
 app.post('/tracking/:id/promise', async (c) =>
   c.json(
     await npi.updatePromise(

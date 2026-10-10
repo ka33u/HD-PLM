@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ownsWork } from '../../lib/npi/work-ownership'
+import { NpiQuickReply } from './NpiQuickReply'
 import { NpiProjectTrash } from './NpiProjectTrash'
 import { NpiBomRevision } from './NpiBomRevision'
 import { projectTitle } from '../../lib/npi/project-identity'
@@ -32,6 +33,7 @@ import {
   SlidersHorizontal,
   Upload,
   Trash2,
+  Zap,
 } from 'lucide-react'
 import {
   Dialog,
@@ -198,6 +200,10 @@ export function NpiWorkspace() {
     [notice, setNotice] = useState(''),
     [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false)
+  const [quickReply, setQuickReply] = useState<{
+    kind: 'manufacturing' | 'procurement'
+    projectId?: string
+  } | null>(null)
   const [trashRevision, setTrashRevision] = useState(0)
   const [templateEditor, setTemplateEditor] = useState<TemplateDraft | null>(
     null,
@@ -1374,6 +1380,27 @@ export function NpiWorkspace() {
                   <h1>{moduleInfo[view].title}</h1>
                   <p>{moduleInfo[view].description}</p>
                 </div>
+                {((view === 'manufacturing' &&
+                  ['admin', 'technical', 'manufacturing'].includes(
+                    meta.actor.role,
+                  )) ||
+                  (['procurement', 'purchasing'].includes(view) &&
+                    ['admin', 'procurement'].includes(meta.actor.role))) && (
+                  <button
+                    className="npi-button"
+                    onClick={() =>
+                      setQuickReply({
+                        kind:
+                          view === 'manufacturing'
+                            ? 'manufacturing'
+                            : 'procurement',
+                      })
+                    }
+                  >
+                    <Zap size={18} />
+                    部件快速回复
+                  </button>
+                )}
                 {['admin', 'technical'].includes(meta.actor.role) &&
                   ['dashboard', 'projects', 'bom'].includes(view) && (
                     <div className="npi-actions">
@@ -2320,6 +2347,49 @@ export function NpiWorkspace() {
                       </p>
                     )}
                     <div hidden={bomLoading !== null} aria-label="BOM版本内容">
+                      {meta &&
+                        project.currentNpiStage !== 'completed' &&
+                        ['admin', 'technical', 'manufacturing'].includes(
+                          meta.actor.role,
+                        ) && (
+                          <div className="npi-quick-entry">
+                            <div>
+                              <strong>批量回复部件日期</strong>
+                              <p>
+                                表格内连续填写、多选统一日期，已分配的部件一次提交。
+                              </p>
+                            </div>
+                            <div className="npi-actions">
+                              <button
+                                className="npi-button"
+                                onClick={() =>
+                                  setQuickReply({
+                                    kind: 'manufacturing',
+                                    projectId: project.id,
+                                  })
+                                }
+                              >
+                                <Zap size={16} />
+                                生产部件快速回复
+                              </button>
+                              {meta.actor.role === 'admin' && (
+                                <button
+                                  className="npi-button secondary"
+                                  onClick={() =>
+                                    setQuickReply({
+                                      kind: 'procurement',
+                                      projectId: project.id,
+                                    })
+                                  }
+                                >
+                                  <Zap size={16} />
+                                  采购部件快速回复
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                       <p className="npi-muted">
                         跟踪建议依据模板映射的物料属性生成，确认前不计入待回复或齐套。需要采购的物料请点击“分配采购”，选择采购负责人和要求日期后即进入采购待办；“供应
                         /
@@ -2944,6 +3014,16 @@ export function NpiWorkspace() {
           )}
         </DialogContent>
       </Dialog>
+      {quickReply && meta && (
+        <NpiQuickReply
+          key={`${quickReply.kind}-${quickReply.projectId || 'all'}`}
+          api={api}
+          actorId={meta.actor.id}
+          {...quickReply}
+          onClose={() => setQuickReply(null)}
+          onSaved={() => refresh()}
+        />
+      )}
       {procurementReply && meta && (
         <NpiProcurementReplyDialog
           key={procurementReply.item.id + String(procurementReply.complete)}

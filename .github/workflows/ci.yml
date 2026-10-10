@@ -52,3 +52,4 @@ jobs:
       - run: npm run test:setup-browser
       - run: npm run test:issue-1
       - run: npm run test:trash
+      - run: npm run test:quick-reply

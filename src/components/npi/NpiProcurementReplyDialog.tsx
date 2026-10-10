@@ -81,9 +81,7 @@ export function NpiProcurementReplyDialog({
       )
       if (result.actorId !== actorId)
         throw new Error('登录账号已改变，请整页刷新。')
-      const next = result.items.find(
-        (row) => row.id === item.id && row.ownerId === actorId,
-      )
+      const next = result.items.find((row) => row.id === item.id)
       if (!next)
         throw new Error('该物料已不在你的采购待办中，请联系项目负责人核对。')
       setUnavailable(false)

@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -28,7 +28,8 @@
     "test:setup": "node --import tsx --test tests/setup.test.ts",
     "test:setup-browser": "node --import tsx tests/setup-browser.test.ts",
     "test:issue-1": "node --import tsx --test tests/issue-1.test.ts",
-    "test:trash": "node --import tsx --test tests/trash.test.ts"
+    "test:trash": "node --import tsx --test tests/trash.test.ts",
+    "test:quick-reply": "node --import tsx --test tests/quick-reply.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",
