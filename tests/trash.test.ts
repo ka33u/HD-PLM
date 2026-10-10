@@ -377,7 +377,9 @@ try {
         .fill('例会确认两个项目继续开发')
       await page.getByRole('button', { name: '确认恢复（2）' }).click()
       await expect(page.getByRole('dialog')).toHaveCount(0)
-      await expect(page.getByRole('status')).toContainText('已恢复 2 个项目')
+      await expect(
+        page.getByRole('status').filter({ hasText: '已恢复' }),
+      ).toContainText('已恢复 2 个项目')
       await expect(table.locator('tbody tr')).toHaveCount(7)
       await page
         .getByRole('button', { name: '返回新品项目', exact: true })
@@ -441,8 +443,19 @@ try {
         .getByRole('button', { name: '恢复此项目', exact: true })
         .click()
       await phone.getByLabel('恢复原因', { exact: true }).fill('移动端确认恢复')
+      // The success notice can coexist with the list's loading status during refresh.
+      await phone.route(
+        '**/api/v1/npi/project-trash',
+        async (route) => {
+          await delay(350)
+          await route.continue()
+        },
+        { times: 1 },
+      )
       await phone.getByRole('button', { name: '确认恢复（1）' }).click()
-      await expect(phone.getByRole('status')).toContainText('已恢复 1 个项目')
+      await expect(
+        phone.getByRole('status').filter({ hasText: '已恢复' }),
+      ).toContainText('已恢复 1 个项目')
       await phone.getByRole('button', { name: '打开项目', exact: true }).click()
       await expect(
         phone.getByRole('heading', { name: /YE5-250M/ }),
