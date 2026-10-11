@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { nodeNames } from '../../lib/npi/domain'
 import type { FormEvent } from 'react'
 import type { ProjectDetail } from '../../lib/npi/service'
@@ -12,6 +12,7 @@ export function NpiManufacturingReply({
   onReload,
   onException,
   onBusyChange,
+  onDirtyChange,
   onCancel,
   readOnly = false,
   disabled = false,
@@ -21,6 +22,7 @@ export function NpiManufacturingReply({
   onSaved: () => Promise<void>
   onReload: () => Promise<ProjectDetail>
   onBusyChange?: (busy: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void
   onCancel?: () => void
   onException?: () => void
   readOnly?: boolean
@@ -51,6 +53,21 @@ export function NpiManufacturingReply({
   const pending = useRef(false)
   const busy = operation !== null
   const current = latest || project
+  const dirty =
+    !saved &&
+    Object.entries(values).some(([type, value]) => value !== base.values[type])
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => {
+    if (!dirty) return
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [dirty])
   const reviewRequired = !!latest || base.version !== project.plan?.version
   const locked =
     readOnly ||
@@ -170,6 +187,7 @@ export function NpiManufacturingReply({
       )
       committed = true
       setSaved(true)
+      onDirtyChange?.(false)
       setBase({ version: result.version, values: { ...values } })
       setReasons({})
       setMessage('制造承诺已保存，无需重复提交。')

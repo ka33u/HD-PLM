@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ownsWork } from '../../lib/npi/work-ownership'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { nodeNames, today } from '../../lib/npi/domain'
 import {
   Dialog,
@@ -35,7 +35,26 @@ export function NpiManufacturingCompletionDialog({
   const [needsReload, setNeedsReload] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmClose, setConfirmClose] = useState(false)
   const pending = useRef(false)
+  const dirty = !saved && Object.values(dates).some(Boolean)
+  useEffect(() => {
+    if (!dirty) {
+      setConfirmClose(false)
+      return
+    }
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [dirty])
+  const requestClose = () => {
+    if (pending.current) return
+    if (dirty) setConfirmClose(true)
+    else onClose()
+  }
   const current = latest || base
   const nodes = current.items.filter((i) => i.sourceType === 'MANUFACTURING')
   const authorized =
@@ -165,7 +184,7 @@ export function NpiManufacturingCompletionDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !pending.current) onClose()
+        if (!open) requestClose()
       }}
     >
       <DialogContent
@@ -177,6 +196,30 @@ export function NpiManufacturingCompletionDialog({
         <DialogDescription style={{ overflowWrap: 'anywhere' }}>
           {base.name} · {base.code}。只填写本次已完成的节点，其他节点留空。
         </DialogDescription>
+        {confirmClose && (
+          <div className="npi-alert" role="alert">
+            <span>还有实际完成日期未保存，关闭后将丢失本次填写。</span>
+            <div className="npi-actions">
+              <button
+                autoFocus
+                type="button"
+                className="npi-button secondary"
+                disabled={!!busy}
+                onClick={() => setConfirmClose(false)}
+              >
+                继续填写
+              </button>
+              <button
+                type="button"
+                className="npi-button secondary"
+                disabled={!!busy}
+                onClick={onClose}
+              >
+                放弃填写并关闭
+              </button>
+            </div>
+          </div>
+        )}
         {!saved && (
           <div className="npi-actions">
             <button
@@ -252,7 +295,7 @@ export function NpiManufacturingCompletionDialog({
               type="button"
               className="npi-button secondary"
               disabled={!!busy}
-              onClick={onClose}
+              onClick={requestClose}
             >
               {saved || allCompleted || locked ? '关闭' : '取消'}
             </button>

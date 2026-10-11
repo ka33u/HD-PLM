@@ -1,0 +1,234 @@
+.npi-stage-guide {
+  border: 1px solid #d9e5f6;
+  border-radius: 12px;
+  background: #fff;
+  margin: 0 0 20px;
+  overflow: hidden;
+}
+.npi-stage-progress {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5edf7;
+  background: #f8faff;
+  gap: 12px;
+}
+.npi-stage-progress li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  color: #8493a8;
+  font-size: 13px;
+}
+.npi-stage-progress .done {
+  color: #41876d;
+}
+.npi-stage-progress .current {
+  color: #245fb6;
+  font-weight: 650;
+}
+.npi-stage-progress svg {
+  flex-shrink: 0;
+}
+.npi-stage-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px;
+}
+.npi-stage-kicker {
+  font-size: 12px;
+  color: #4979b8;
+}
+.npi-stage-main h2 {
+  font-size: 19px;
+  margin: 6px 0 8px;
+  color: #263d5c;
+}
+.npi-stage-main p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #62738b;
+  margin: 0 0 8px;
+}
+.npi-stage-main small {
+  display: block;
+  color: #7d8da3;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.npi-stage-checks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid #e7edf5;
+}
+.npi-stage-checks button {
+  padding: 16px 20px;
+  border: 0;
+  border-right: 1px solid #e7edf5;
+  background: white;
+  text-align: left;
+  color: #5d718c;
+  cursor: pointer;
+}
+.npi-stage-checks button:hover {
+  background: #f5f9ff;
+}
+.npi-stage-checks button:last-child {
+  border-right: 0;
+}
+.npi-stage-checks span,
+.npi-stage-checks strong,
+.npi-stage-checks small {
+  display: block;
+}
+.npi-stage-checks span {
+  font-size: 12px;
+}
+.npi-stage-checks strong {
+  font-size: 17px;
+  margin: 6px 0;
+  color: #355c8a;
+}
+.npi-stage-checks small {
+  font-size: 11px;
+  color: #8a98aa;
+  line-height: 1.5;
+}
+.npi-stage-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #fff9ee;
+  color: #92723c;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.npi-stage-note svg {
+  flex-shrink: 0;
+}
+.npi-project-management {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 0;
+  border-top: 1px solid #e4ecf5;
+}
+.npi-project-management > span {
+  font-size: 12px;
+  color: #8190a5;
+  margin-right: 8px;
+}
+.npi-project-management .npi-button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.npi-project-management .npi-delete-project {
+  margin-left: auto;
+  color: #985b5b;
+  border-color: #e9dada;
+}
+.npi-node-reply-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid #dce6f5;
+  border-radius: 10px;
+  background: #f7faff;
+  margin: 18px 0;
+}
+.npi-node-reply-entry strong {
+  font-size: 15px;
+  color: #36577c;
+}
+.npi-node-reply-entry p {
+  font-size: 12px;
+  color: #7a8ca4;
+  margin: 5px 0 0;
+}
+@media (max-width: 760px) {
+  .npi-stage-progress {
+    gap: 8px;
+    padding: 12px;
+    overflow-x: auto;
+  }
+  .npi-stage-progress li {
+    flex-direction: column;
+    min-width: 56px;
+    gap: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .npi-stage-main {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+    gap: 14px;
+  }
+  .npi-stage-main h2 {
+    font-size: 17px;
+  }
+  .npi-stage-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .npi-stage-checks button {
+    padding: 12px;
+    border-bottom: 1px solid #e7edf5;
+  }
+  .npi-stage-checks strong {
+    font-size: 15px;
+  }
+  .npi-stage-note {
+    padding: 12px;
+  }
+  .npi-project-management {
+    gap: 6px;
+  }
+  .npi-project-management > span {
+    flex-basis: 100%;
+  }
+  .npi-node-reply-entry {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .npi-node-reply-entry .npi-actions {
+    flex-wrap: wrap;
+  }
+}
+
+.npi-navigation-notice {
+  position: fixed;
+  z-index: 1000;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(640px, calc(100vw - 24px));
+  width: max-content;
+  padding: 14px 18px;
+  border: 1px solid #d6e3f6;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: #315b8c;
+  box-shadow: 0 8px 32px #18355726;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.npi-navigation-notice button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: #225caf;
+  cursor: pointer;
+}

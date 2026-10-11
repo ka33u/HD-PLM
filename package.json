@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -15,7 +15,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "setup": "tsx scripts/setup.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/npi-unit.test.ts tests/npi-file-validation.test.ts tests/build-config.test.ts",
+    "test": "node --import tsx --test tests/npi-unit.test.ts tests/npi-file-validation.test.ts tests/build-config.test.ts tests/workspace-location.test.ts",
     "test:http": "node --import tsx tests/npi-http.test.ts",
     "test:auth": "node --import tsx --test tests/auth.test.ts",
     "test:browser": "node --import tsx tests/npi-bom-browser.test.ts",
@@ -29,7 +29,10 @@
     "test:setup-browser": "node --import tsx tests/setup-browser.test.ts",
     "test:issue-1": "node --import tsx --test tests/issue-1.test.ts",
     "test:trash": "node --import tsx --test tests/trash.test.ts",
-    "test:quick-reply": "node --import tsx --test tests/quick-reply.test.ts"
+    "test:quick-reply": "node --import tsx --test tests/quick-reply.test.ts",
+    "test:workflow-guards": "node --import tsx --test tests/workflow-guards.test.ts",
+    "test:preparation-board": "node --import tsx --test tests/preparation-board.test.ts",
+    "test:workflow-navigation": "node --import tsx --test tests/workflow-navigation.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",

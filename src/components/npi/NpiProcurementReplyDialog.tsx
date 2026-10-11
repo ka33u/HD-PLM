@@ -27,6 +27,7 @@ const values = (
 const locked = (item: PurchaseItem) =>
   !!item.actualCompleteDate ||
   item.currentNpiStage === 'completed' ||
+  item.bomReference?.current === false ||
   (!item.trackingEnabled && !item.affectsKit)
 
 export function NpiProcurementReplyDialog({
@@ -269,7 +270,9 @@ export function NpiProcurementReplyDialog({
           <p role="status" className="npi-message">
             {current.actualCompleteDate
               ? `该物料已于 ${current.actualCompleteDate} 确认到货，不能再次修改。`
-              : '该项目已完成或物料已停止跟踪，当前记录只读。'}
+              : current.bomReference?.current === false
+                ? 'BOM已换版，需项目负责人复核后再回复。'
+                : '该项目已完成或物料已停止跟踪，当前记录只读。'}
           </p>
         )}
         <form onSubmit={submit}>

@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ownsWork } from '../../lib/npi/work-ownership'
+import { NpiStageGuide } from './NpiStageGuide'
+import {
+  readWorkspaceLocation,
+  projectLocation,
+  projectTabs,
+} from './workspace-location'
 import { NpiQuickReply } from './NpiQuickReply'
 import { NpiProjectTrash } from './NpiProjectTrash'
 import { NpiBomRevision } from './NpiBomRevision'
@@ -71,7 +77,6 @@ import { NpiProcurementReplyDialog } from './NpiProcurementReplyDialog'
 import { NpiTrackingHistory } from './NpiTrackingHistory'
 import { NpiExternalMaterial } from './NpiExternalMaterial'
 import { NpiPagination, usePagination } from './NpiPagination'
-import { NpiManufacturingReply } from './NpiManufacturingReply'
 import { NpiManufacturingReplyDialog } from './NpiManufacturingReplyDialog'
 import { NpiManufacturingCompletionDialog } from './NpiManufacturingCompletionDialog'
 import { NpiProjectHistory } from './NpiProjectHistory'
@@ -195,7 +200,7 @@ export function NpiWorkspace() {
     ),
     [returnView, setReturnView] = useState<ModuleId>('projects'),
     [search, setSearch] = useState(''),
-    [tab, setTab] = useState('overview')
+    [tab, setTabState] = useState('overview')
   const [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [loading, setLoading] = useState(false),
@@ -204,6 +209,11 @@ export function NpiWorkspace() {
     kind: 'manufacturing' | 'procurement'
     projectId?: string
   } | null>(null)
+  const routeInitialized = useRef(false)
+  const lastNavigationUrl = useRef(
+    window.location.pathname + window.location.search,
+  )
+  const [navigationBlocked, setNavigationBlocked] = useState(false)
   const [trashRevision, setTrashRevision] = useState(0)
   const [templateEditor, setTemplateEditor] = useState<TemplateDraft | null>(
     null,
@@ -436,6 +446,8 @@ export function NpiWorkspace() {
     itemId?: string,
     initialTab = 'overview',
     manufacturingAction: 'reply' | 'complete' | null = null,
+    updateUrl = true,
+    returnTo?: ModuleId,
   ) => {
     const request = ++projectRequest.current
     setBomLoading(null)
@@ -453,7 +465,8 @@ export function NpiWorkspace() {
             ])
           : null
       if (request !== projectRequest.current) return
-      if (view !== 'project') setReturnView(view)
+      const origin = returnTo || (view === 'project' ? returnView : view)
+      setReturnView(origin)
       projectId.current = id
       setProject(p)
       setReconciliation(bomData?.[1] || null)
@@ -469,13 +482,21 @@ export function NpiWorkspace() {
       const target = p.items.find((i) => i.id === itemId)
       if (!target) setNavigationRevision((n) => n + 1)
       setFocusedItemId(target?.id || null)
-      setTab(
-        target
-          ? target.sourceType === 'MANUFACTURING'
-            ? 'manufacturing'
-            : 'kit'
-          : initialTab,
+      const nextTab = target
+        ? target.sourceType === 'MANUFACTURING'
+          ? 'manufacturing'
+          : 'kit'
+        : projectTabs.includes(initialTab as (typeof projectTabs)[number])
+          ? initialTab
+          : 'overview'
+      setTabState(nextTab)
+      const url = projectLocation(id, nextTab, origin, target?.id)
+      if (
+        updateUrl &&
+        url !== window.location.pathname + window.location.search
       )
+        window.history.pushState(null, '', url)
+      lastNavigationUrl.current = url
       if (itemId && !target) setNotice('目标物料已变化，请在项目中核对最新记录')
       setSearch('')
       setView('project')
@@ -494,11 +515,49 @@ export function NpiWorkspace() {
               ownsWork(meta?.actor, p.manufacturingOwnerId))),
       )
     } catch (e) {
-      if (request === projectRequest.current) setError(String(e))
+      if (request === projectRequest.current) {
+        setError(e instanceof Error ? e.message : '无法打开项目')
+        if (!updateUrl) {
+          const fallback = returnTo || 'projects'
+          setProject(null)
+          projectId.current = null
+          setView(fallback)
+          const url =
+            fallback === 'trash' ? '/npi/trash' : `/npi?view=${fallback}`
+          window.history.replaceState(null, '', url)
+          lastNavigationUrl.current = url
+        }
+      }
     } finally {
       if (request === projectRequest.current) setLoading(false)
     }
   }
+  useEffect(() => {
+    if (!meta || routeInitialized.current) return
+    routeInitialized.current = true
+    const route = readWorkspaceLocation(window.location)
+    if (!route.projectId) return
+    if (meta.actor.role === 'procurement') {
+      window.history.replaceState(null, '', '/npi?view=procurement')
+      lastNavigationUrl.current = '/npi?view=procurement'
+      setError('采购岗位请从采购任务处理分配的部件，不能打开项目全量资料。')
+      return
+    }
+    const allowed = [
+      ...navigationFor(meta.actor.role),
+      ...(['admin', 'technical'].includes(meta.actor.role)
+        ? ['trash' as const]
+        : []),
+    ]
+    void openProject(
+      route.projectId,
+      route.itemId,
+      route.tab,
+      null,
+      false,
+      route.view && allowed.includes(route.view) ? route.view : 'projects',
+    )
+  }, [meta, openProject])
   const openModal = (m: Modal) => {
     setModalError('')
     setModal(m)
@@ -1051,6 +1110,7 @@ export function NpiWorkspace() {
       ['technical', 'manufacturing'].includes(meta?.actor.role || ''))
   const canAdjustPlan = canManage || meta?.actor.role === 'supervisor'
   const canReply = (i: NpiTracking) =>
+    i.bomReference?.current !== false &&
     (i.trackingEnabled || i.affectsKit) &&
     !i.actualCompleteDate &&
     project?.currentNpiStage !== 'completed' &&
@@ -1171,6 +1231,13 @@ export function NpiWorkspace() {
                   >
                     附件
                   </button>
+                  {i.bomReference?.current === false &&
+                    !i.actualCompleteDate &&
+                    (i.trackingEnabled || i.affectsKit) && (
+                      <span className="npi-warning-text">
+                        待BOM复核，请项目负责人处理
+                      </span>
+                    )}
                   {canReply(i) && (
                     <>
                       <button onClick={() => showPromise(i)}>
@@ -1219,12 +1286,38 @@ export function NpiWorkspace() {
       )}
     </div>
   )
+  function changeProjectTab(
+    next: string,
+    itemId: string | null = null,
+    updateUrl = true,
+    currentBom = false,
+  ) {
+    if (!project) return
+    const target = projectTabs.includes(next as (typeof projectTabs)[number])
+      ? next
+      : 'overview'
+    setTabState(target)
+    setFocusedItemId(itemId)
+    const url = projectLocation(project.id, target, returnView, itemId)
+    if (updateUrl && url !== window.location.pathname + window.location.search)
+      window.history.pushState(null, '', url)
+    lastNavigationUrl.current = url
+    if (target === 'bom')
+      void loadBom(
+        (currentBom
+          ? project.activeBomImportId
+          : bomVersion || project.activeBomImportId) || '',
+      )
+  }
   const navigate = useCallback((next: ModuleId, updateUrl = true) => {
     projectRequest.current++
     setBomLoading(null)
     setLoading(false)
     setManufacturingReplyOpen(false)
     setManufacturingCompletionOpen(false)
+    setHistoryItem(null)
+    setFileItem(null)
+    setNavigationBlocked(false)
     setNavigationRevision((n) => n + 1)
     setView(next)
     setFocusedItemId(null)
@@ -1238,32 +1331,90 @@ export function NpiWorkspace() {
         '',
         next === 'trash' ? '/npi/trash' : `/npi?view=${next}`,
       )
+    lastNavigationUrl.current =
+      window.location.pathname + window.location.search
   }, [])
   useEffect(() => {
     const restoreNavigation = () => {
-      const requested = locationModule() || 'dashboard'
+      if (
+        manufacturingReplyOpen ||
+        manufacturingCompletionOpen ||
+        quickReply ||
+        modal ||
+        externalOpen ||
+        exceptionOpen ||
+        templateEditor ||
+        procurementReply ||
+        revisionRow ||
+        document.querySelector('[role="dialog"][data-state="open"]') ||
+        fileOperation.isBusy()
+      ) {
+        window.history.pushState(null, '', lastNavigationUrl.current)
+        setNavigationBlocked(true)
+        return
+      }
+      setNavigationBlocked(false)
+      const route = readWorkspaceLocation(window.location)
       const allowed = meta
         ? [
             ...navigationFor(meta.actor.role),
             ...(['admin', 'technical'].includes(meta.actor.role)
-              ? ['trash']
+              ? ['trash' as const]
               : []),
           ]
         : []
-      navigate(
-        allowed.includes(requested)
-          ? requested
-          : meta?.actor.role === 'procurement'
-            ? 'procurement'
-            : 'dashboard',
-        false,
-      )
+      const requested = route.view || 'dashboard'
+      const destination = allowed.includes(requested)
+        ? requested
+        : meta?.actor.role === 'procurement'
+          ? 'procurement'
+          : 'dashboard'
+      if (meta && meta.actor.role !== 'procurement' && route.projectId) {
+        if (project?.id === route.projectId) {
+          projectRequest.current++
+          setLoading(false)
+          setBomLoading(null)
+          setReturnView(destination)
+          changeProjectTab(route.tab, route.itemId || null, false)
+          lastNavigationUrl.current =
+            window.location.pathname + window.location.search
+        } else
+          void openProject(
+            route.projectId,
+            route.itemId,
+            route.tab,
+            null,
+            false,
+            destination,
+          )
+      } else navigate(destination, false)
     }
     window.addEventListener('popstate', restoreNavigation)
     return () => window.removeEventListener('popstate', restoreNavigation)
-  }, [meta, navigate])
+  }, [
+    meta,
+    navigate,
+    openProject,
+    project,
+    manufacturingReplyOpen,
+    manufacturingCompletionOpen,
+    quickReply,
+    modal,
+    externalOpen,
+    exceptionOpen,
+    templateEditor,
+    procurementReply,
+    revisionRow,
+    fileOperation,
+  ])
   return (
     <div className="npi-app">
+      {navigationBlocked && (
+        <div className="npi-navigation-notice" role="alert">
+          <span>请先保存或关闭当前窗口，再切换页面。填写内容已保留。</span>
+          <button onClick={() => setNavigationBlocked(false)}>知道了</button>
+        </div>
+      )}
       <aside className="npi-sidebar">
         <a href="/npi" className="npi-brand">
           <span>
@@ -1524,76 +1675,9 @@ export function NpiWorkspace() {
                         </p>
                       )}
                   </div>
-                  {meta &&
-                    project.currentNpiStage !== 'completed' &&
-                    (['admin', 'supervisor'].includes(meta.actor.role) ||
-                      (meta.actor.role === 'technical' &&
-                        meta.actor.id === project.technicalOwnerId)) && (
-                      <NpiProjectChange
-                        api={api}
-                        meta={meta}
-                        project={project}
-                        onChanged={async (canContinue) => {
-                          if (!canContinue) navigate('dashboard')
-                          setNotice('项目变更已保存')
-                          await refresh()
-                        }}
-                      />
-                    )}
-                  {meta &&
-                    (meta.actor.role === 'admin' ||
-                      (meta.actor.role === 'technical' &&
-                        meta.actor.id === project.technicalOwnerId)) && (
-                      <NpiProjectInheritance
-                        api={api}
-                        meta={meta}
-                        project={project}
-                        onCreated={async (id, canContinue) => {
-                          setNotice(
-                            '已从相似项目新建，请核对BOM及物料要求日期并安排负责人回复',
-                          )
-                          await refresh()
-                          if (canContinue) await openProject(id)
-                          else navigate('dashboard')
-                        }}
-                      />
-                    )}
-                  {(meta?.actor.role === 'admin' ||
-                    (meta?.actor.role === 'technical' &&
-                      meta.actor.id === project.technicalOwnerId)) && (
-                    <button
-                      className="npi-button secondary"
-                      onClick={() =>
-                        openModal({
-                          title: '删除项目（移入回收站）',
-                          help: '项目将从待办与报表移除，全部资料和历史保留，可在项目回收站恢复。请输入项目编号确认。',
-                          path: `/projects/${project.id}/trash`,
-                          fixed: {
-                            action: 'delete',
-                            expectedVersion: project.version,
-                          },
-                          fields: [
-                            {
-                              key: 'confirmCode',
-                              label: '确认项目编号',
-                              required: true,
-                            },
-                            {
-                              key: 'reason',
-                              label: '删除原因',
-                              type: 'textarea',
-                              required: true,
-                            },
-                          ],
-                        })
-                      }
-                    >
-                      删除项目
-                    </button>
-                  )}
                   {canManage && project.currentNpiStage !== 'completed' && (
                     <button
-                      className="npi-button secondary"
+                      className="npi-button"
                       onClick={() => {
                         const next =
                           stages[stages.indexOf(project.currentNpiStage) + 1]
@@ -1616,7 +1700,9 @@ export function NpiWorkspace() {
                                   )
                                   .map((i) => i.name)
                                   .join('、')}`
-                              : '阶段推进会留下操作记录。项目完成前需确认制造节点和关键物料全部完成。',
+                              : next === 'completed'
+                                ? `结项后项目只读，不能再回复日期或处理问题。当前未关闭问题 ${project.openIssueCount} 项；非关键未完成跟踪 ${project.items.filter((i) => i.sourceType !== 'MANUFACTURING' && i.trackingEnabled && !i.affectsKit && !i.actualCompleteDate).length} 项；未跟踪BOM ${project.untrackedBomCount} 项。请确认资料与验收结果已核对。`
+                                : '请确认当前阶段工作已核对，再进入下一阶段。阶段推进会留下操作记录。',
                           path: `/projects/${project.id}/stage`,
                           method: 'PATCH',
                           fixed: {
@@ -1638,10 +1724,96 @@ export function NpiWorkspace() {
                         })
                       }}
                     >
-                      推进阶段 <ChevronRight size={16} />
+                      推进阶段 ·{' '}
+                      {
+                        stageNames[
+                          stages[stages.indexOf(project.currentNpiStage) + 1]!
+                        ]
+                      }{' '}
+                      <ChevronRight size={16} />
                     </button>
                   )}
                 </div>
+                {(meta?.actor.role === 'admin' ||
+                  (meta?.actor.role === 'technical' &&
+                    meta.actor.id === project.technicalOwnerId) ||
+                  (meta?.actor.role === 'supervisor' &&
+                    project.currentNpiStage !== 'completed')) && (
+                  <div
+                    className="npi-project-management"
+                    role="group"
+                    aria-label="项目管理"
+                  >
+                    <span>项目管理</span>{' '}
+                    {meta &&
+                      project.currentNpiStage !== 'completed' &&
+                      (['admin', 'supervisor'].includes(meta.actor.role) ||
+                        (meta.actor.role === 'technical' &&
+                          meta.actor.id === project.technicalOwnerId)) && (
+                        <NpiProjectChange
+                          api={api}
+                          meta={meta}
+                          project={project}
+                          onChanged={async (canContinue) => {
+                            if (!canContinue) navigate('dashboard')
+                            setNotice('项目变更已保存')
+                            await refresh()
+                          }}
+                        />
+                      )}
+                    {meta &&
+                      (meta.actor.role === 'admin' ||
+                        (meta.actor.role === 'technical' &&
+                          meta.actor.id === project.technicalOwnerId)) && (
+                        <NpiProjectInheritance
+                          api={api}
+                          meta={meta}
+                          project={project}
+                          onCreated={async (id, canContinue) => {
+                            setNotice(
+                              '已从相似项目新建，请核对BOM及物料要求日期并安排负责人回复',
+                            )
+                            await refresh()
+                            if (canContinue) await openProject(id)
+                            else navigate('dashboard')
+                          }}
+                        />
+                      )}
+                    {(meta?.actor.role === 'admin' ||
+                      (meta?.actor.role === 'technical' &&
+                        meta.actor.id === project.technicalOwnerId)) && (
+                      <button
+                        className="npi-button secondary npi-delete-project"
+                        onClick={() =>
+                          openModal({
+                            title: '删除项目（移入回收站）',
+                            help: '项目将从待办与报表移除，全部资料和历史保留，可在项目回收站恢复。请输入项目编号确认。',
+                            path: `/projects/${project.id}/trash`,
+                            fixed: {
+                              action: 'delete',
+                              expectedVersion: project.version,
+                            },
+                            fields: [
+                              {
+                                key: 'confirmCode',
+                                label: '确认项目编号',
+                                required: true,
+                              },
+                              {
+                                key: 'reason',
+                                label: '删除原因',
+                                type: 'textarea',
+                                required: true,
+                              },
+                            ],
+                          })
+                        }
+                      >
+                        删除项目
+                      </button>
+                    )}
+                  </div>
+                )}
                 <dl className="npi-project-facts">
                   {[
                     [
@@ -1691,22 +1863,12 @@ export function NpiWorkspace() {
                   ))}
                 </dl>
               </div>
-              {tab === 'overview' && (
-                <div className="npi-timeline">
-                  {stages.map((s, i) => (
-                    <div
-                      key={s}
-                      className={
-                        i <= stages.indexOf(project.currentNpiStage)
-                          ? 'reached'
-                          : ''
-                      }
-                    >
-                      <span>{i + 1}</span>
-                      {stageNames[s]}
-                    </div>
-                  ))}
-                </div>
+              {tab === 'overview' && meta && (
+                <NpiStageGuide
+                  project={project}
+                  meta={meta}
+                  onTab={(next) => changeProjectTab(next, null, true, true)}
+                />
               )}
               {focusedItem && (
                 <div
@@ -1722,20 +1884,13 @@ export function NpiWorkspace() {
                   </span>
                   <button
                     className="npi-button secondary"
-                    onClick={() => setFocusedItemId(null)}
+                    onClick={() => changeProjectTab(tab)}
                   >
                     取消定位
                   </button>
                 </div>
               )}
-              <Tabs
-                value={tab}
-                onValueChange={(v) => {
-                  setTab(v)
-                  if (v === 'bom')
-                    void loadBom(bomVersion || project.activeBomImportId || '')
-                }}
-              >
+              <Tabs value={tab} onValueChange={(v) => changeProjectTab(v)}>
                 <TabsList className="npi-tabs">
                   <TabsTrigger value="overview">概览</TabsTrigger>
                   <TabsTrigger value="manufacturing">制造准备</TabsTrigger>
@@ -1758,20 +1913,14 @@ export function NpiWorkspace() {
                       meta={meta}
                       api={api}
                       onLocate={(id, type) => {
-                        setFocusedItemId(id)
-                        setTab(
+                        changeProjectTab(
                           type === 'manufacturing_node'
                             ? 'manufacturing'
                             : 'kit',
+                          id,
                         )
                       }}
-                      onTab={(next) => {
-                        setTab(next)
-                        if (next === 'bom')
-                          void loadBom(
-                            bomVersion || project.activeBomImportId || '',
-                          )
-                      }}
+                      onTab={changeProjectTab}
                     />
                   )}
                 </TabsContent>
@@ -1823,9 +1972,9 @@ export function NpiWorkspace() {
                   <NpiBottleneck
                     kit={project.kit}
                     onLocate={(id, type) => {
-                      setFocusedItemId(id)
-                      setTab(
+                      changeProjectTab(
                         type === 'manufacturing_node' ? 'manufacturing' : 'kit',
+                        id,
                       )
                     }}
                   />
@@ -1833,36 +1982,55 @@ export function NpiWorkspace() {
                     key={project.id}
                     project={project}
                     focusedItemId={focusedItemId}
-                    onClearFocus={() => setFocusedItemId(null)}
+                    onClearFocus={() => changeProjectTab(tab)}
                     canManage={canManage}
                     onExternal={showExternal}
                     onBom={(mode = 'all') => {
-                      setFocusedItemId(null)
-                      setTab('bom')
+                      changeProjectTab('bom', null, true, true)
                       setBomMode(mode)
                       setSearch('')
-                      void loadBom(project.activeBomImportId || '')
                     }}
                     renderTable={trackingTable}
                   />
-                  <NpiManufacturingReply
-                    key={project.id}
-                    project={project}
-                    api={api}
-                    onSaved={refreshManufacturingReply}
-                    onReload={reloadManufacturingPlan}
-                    onException={() => setExceptionOpen(true)}
-                    readOnly={
-                      project.currentNpiStage === 'completed' ||
-                      !(
-                        meta?.actor.role === 'admin' ||
-                        (['technical', 'manufacturing'].includes(
-                          meta?.actor.role || '',
-                        ) &&
-                          ownsWork(meta?.actor, project.manufacturingOwnerId))
-                      )
-                    }
-                  />
+                  <div className="npi-node-reply-entry">
+                    <div>
+                      <strong>制造四节点回复</strong>
+                      <p>
+                        工艺、工装、齐套、装配使用同一集中回复窗口；实际完成单独确认。
+                      </p>
+                    </div>
+                    {project.currentNpiStage !== 'completed' &&
+                    (meta?.actor.role === 'admin' ||
+                      (['technical', 'manufacturing'].includes(
+                        meta?.actor.role || '',
+                      ) &&
+                        ownsWork(
+                          meta?.actor,
+                          project.manufacturingOwnerId,
+                        ))) ? (
+                      <div className="npi-actions">
+                        <button
+                          className="npi-button"
+                          onClick={() => setManufacturingReplyOpen(true)}
+                        >
+                          集中回复
+                        </button>
+                        <button
+                          className="npi-button secondary"
+                          onClick={() => setManufacturingCompletionOpen(true)}
+                        >
+                          集中确认完成
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="npi-button secondary"
+                        onClick={() => changeProjectTab('manufacturing')}
+                      >
+                        查看制造节点
+                      </button>
+                    )}
+                  </div>
                 </TabsContent>
                 <TabsContent value="manufacturing">
                   <section className="npi-panel">
@@ -1929,7 +2097,7 @@ export function NpiWorkspace() {
                       project.items.filter(
                         (i) =>
                           i.sourceType === 'ERP_BOM' &&
-                          i.ownerId === project.manufacturingOwnerId &&
+                          i.trackingType !== 'purchase' &&
                           (i.trackingEnabled || i.affectsKit) &&
                           ['pending_reply', 'risk', 'overdue'].includes(
                             i.status,
@@ -1942,7 +2110,7 @@ export function NpiWorkspace() {
                       <h2>制造承诺历史</h2>
                       <button
                         className="npi-project-link"
-                        onClick={() => setTab('history')}
+                        onClick={() => changeProjectTab('history')}
                       >
                         全部承诺与动态 ↗
                       </button>

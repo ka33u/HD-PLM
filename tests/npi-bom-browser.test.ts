@@ -109,6 +109,16 @@ async function openProjectDirectory(page: Page, projectName: string) {
     .getByRole('button', { name: '项目详情 ↗', exact: true })
     .click()
 }
+async function reloadProject(page: Page, projectId: string) {
+  const before = new URL(page.url())
+  assert.equal(before.searchParams.get('project'), projectId)
+  const activeTab = await page.locator('[role="tab"][data-state="active"]').innerText()
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('tab', { name: activeTab, exact: true })).toHaveAttribute('data-state', 'active')
+  const after = new URL(page.url())
+  assert.equal(after.searchParams.get('project'), projectId)
+  assert.equal(after.searchParams.get('tab'), before.searchParams.get('tab'))
+}
 async function saved(page: Page) {
   await page.bringToFront()
   await expect(
@@ -466,8 +476,7 @@ try {
     drafts.getByText('draft-browser.xlsx', { exact: true }),
   ).toBeVisible()
   assert.equal((await detail(tech, id)).imports.length, 0)
-  await tech.reload({ waitUntil: 'domcontentloaded' })
-  await tech.getByRole('button', { name: projectButton(name) }).click()
+  await reloadProject(tech, id)
   await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(
     drafts.getByText('draft-browser.xlsx', { exact: true }),
@@ -816,8 +825,7 @@ try {
   )
   // Exercise the full stage workflow and manufacturing batch through visible controls.
   // Another role has completed/corrected material records; reopen the latest project.
-  await tech.reload({ waitUntil: 'domcontentloaded' })
-  await tech.getByRole('button', { name: projectButton(name) }).click()
+  await reloadProject(tech, id)
   await tech.setViewportSize({ width: 1440, height: 1000 })
   for (const stage of ['manufacturing', 'prototype', 'test']) {
     await tech.getByRole('button', { name: '推进阶段', exact: false }).click()
@@ -1292,7 +1300,7 @@ try {
   console.log(
     'PASS: normal-project folding/keyboard access, search recovery, all KPI drilldowns, dashboard exception filter, scoped manufacturing metrics and mobile project navigation.',
   )
-  // Prototype alignment: abnormal materials by default and actual inline manufacturing writes.
+  // Clear kit responsibilities and one guarded dialog for manufacturing replies.
   const normalMaterial = await apiFixture(
     'technical',
     `/projects/${pendingProject.id}/external-items`,
@@ -1360,16 +1368,34 @@ try {
     path: '/tmp/npi-ui-kit-desktop.png',
     fullPage: true,
   })
-  const inline = mfgDashboard.getByRole('region', {
+  await mfgDashboard
+    .getByRole('button', { name: '集中回复', exact: true })
+    .click()
+  const replyDialog = mfgDashboard.getByRole('dialog', {
+    name: '集中回复制造四节点',
+  })
+  const inline = replyDialog.getByRole('region', {
     name: '制造部集中回复',
     exact: true,
   })
   for (const label of ['工艺准备', '工装准备', '零部件齐套', '样机装配'])
     await inline.getByLabel(`${label}承诺日期`, { exact: true }).fill(day)
-  await inline
-    .getByRole('button', { name: '保存制造回复', exact: true })
-    .click()
-  await expect(inline.getByRole('status')).toContainText('制造承诺已保存')
+  await replyDialog.getByRole('button', { name: '关闭弹窗', exact: true }).click()
+  await expect(replyDialog.getByRole('alert')).toContainText(
+    '还有制造节点日期未保存',
+  )
+  await replyDialog.getByRole('button', { name: '继续填写', exact: true }).click()
+  await expect(
+    inline.getByLabel('工艺准备承诺日期', { exact: true }),
+  ).toHaveValue(day)
+  assert.equal(
+    await mfgDashboard.evaluate(() =>
+      window.dispatchEvent(new Event('beforeunload', { cancelable: true })),
+    ),
+    false,
+  )
+  await inline.getByRole('button', { name: '保存制造回复', exact: true }).click()
+  await expect(replyDialog).toHaveCount(0)
   const firstPlan = await apiFixture(
     'manufacturing',
     `/projects/${pendingProject.id}`,
@@ -1381,12 +1407,19 @@ try {
     ).length,
     4,
   )
+  assert.equal(
+    await mfgDashboard.evaluate(() =>
+      window.dispatchEvent(new Event('beforeunload', { cancelable: true })),
+    ),
+    true,
+  )
+  await mfgDashboard
+    .getByRole('button', { name: '集中回复', exact: true })
+    .click()
   await inline
     .getByLabel('零部件齐套承诺日期', { exact: true })
     .fill(relativeDay(1))
-  await inline
-    .getByRole('button', { name: '保存制造回复', exact: true })
-    .click()
+  await inline.getByRole('button', { name: '保存制造回复', exact: true }).click()
   assert.equal(
     await inline
       .getByLabel('零部件齐套改期原因', { exact: true })
@@ -1407,7 +1440,9 @@ try {
       changeReasons: { processCommitted: '验证并发更新' },
     },
   )
-  await mfgDashboard.getByRole('button', { name: '刷新', exact: true }).click()
+  await inline.getByRole('button', { name: '保存制造回复', exact: true }).click()
+  await expect(inline.getByRole('alert')).toContainText('填写内容已保留')
+  await inline.getByRole('button', { name: '刷新最新计划', exact: true }).click()
   await expect(
     inline.getByRole('button', { name: '载入最新计划', exact: true }),
   ).toBeVisible()
@@ -1417,19 +1452,15 @@ try {
   await expect(
     inline.getByRole('button', { name: '保存制造回复', exact: true }),
   ).toBeDisabled()
-  await inline
-    .getByRole('button', { name: '载入最新计划', exact: true })
-    .click()
+  await inline.getByRole('button', { name: '载入最新计划', exact: true }).click()
   await inline
     .getByLabel('零部件齐套承诺日期', { exact: true })
     .fill(relativeDay(1))
   await inline
     .getByLabel('零部件齐套改期原因', { exact: true })
     .fill('装配前复检需要一天')
-  await inline
-    .getByRole('button', { name: '保存制造回复', exact: true })
-    .click()
-  await expect(inline.getByRole('status')).toContainText('制造承诺已保存')
+  await inline.getByRole('button', { name: '保存制造回复', exact: true }).click()
+  await expect(replyDialog).toHaveCount(0)
   const revised = await apiFixture(
     'manufacturing',
     `/projects/${pendingProject.id}`,
@@ -1447,15 +1478,82 @@ try {
     ),
     false,
   )
-  await inline.screenshot({
+  await mfgDashboard
+    .getByRole('button', { name: '集中回复', exact: true })
+    .click()
+  await inline
+    .getByLabel('工装准备承诺日期', { exact: true })
+    .fill(relativeDay(3))
+  await inline
+    .getByLabel('工装准备改期原因', { exact: true })
+    .fill('验证手机草稿保留')
+  await mfgDashboard.keyboard.press('Escape')
+  await expect(replyDialog.getByRole('alert')).toContainText(
+    '还有制造节点日期未保存',
+  )
+  await replyDialog.screenshot({
     path: '/tmp/npi-ui-inline-manufacturing-mobile.png',
   })
+  await replyDialog
+    .getByRole('button', { name: '放弃填写并关闭', exact: true })
+    .click()
+  await expect(replyDialog).toHaveCount(0)
   await mfgDashboard.getByRole('tab', { name: '制造准备', exact: true }).click()
+  await mfgDashboard
+    .getByRole('button', { name: '集中确认完成', exact: true })
+    .click()
+  const completionDialog = mfgDashboard.getByRole('dialog', {
+    name: '集中确认制造完成',
+  })
+  await completionDialog
+    .getByLabel('工艺准备实际完成日期', { exact: true })
+    .fill(day)
+  await completionDialog
+    .getByRole('button', { name: '取消', exact: true })
+    .click()
+  await expect(completionDialog.getByRole('alert')).toContainText(
+    '还有实际完成日期未保存',
+  )
+  await completionDialog
+    .getByRole('button', { name: '继续填写', exact: true })
+    .click()
+  await completionDialog
+    .getByRole('button', { name: '读取最新记录', exact: true })
+    .click()
+  await expect(
+    completionDialog.getByLabel('工艺准备实际完成日期', { exact: true }),
+  ).toHaveValue(day)
+  await completionDialog
+    .getByRole('button', { name: '按最新记录继续', exact: true })
+    .click()
+  await expect(
+    completionDialog.getByLabel('工艺准备实际完成日期', { exact: true }),
+  ).toHaveValue(day)
+  assert.equal(
+    await mfgDashboard.evaluate(() =>
+      window.dispatchEvent(new Event('beforeunload', { cancelable: true })),
+    ),
+    false,
+  )
+  await mfgDashboard.keyboard.press('Escape')
+  await expect(completionDialog.getByRole('alert')).toContainText(
+    '还有实际完成日期未保存',
+  )
+  await completionDialog
+    .getByRole('button', { name: '放弃填写并关闭', exact: true })
+    .click()
+  await expect(completionDialog).toHaveCount(0)
+  assert.equal(
+    await mfgDashboard.evaluate(() =>
+      window.dispatchEvent(new Event('beforeunload', { cancelable: true })),
+    ),
+    true,
+  )
   await expect(
     mfgDashboard.getByRole('heading', { name: '制造承诺历史', exact: true }),
   ).toBeVisible()
   console.log(
-    'PASS: overview files and nodes, four-step BOM import, kit metrics/source/search/exception filters, inline manufacturing replies/reasons/concurrency/history and mobile layout.',
+    'PASS: overview files and nodes, four-step BOM import, kit metrics/source/search/exception filters, centralized manufacturing replies/reasons/concurrency/history, dirty close/Escape/refresh protection and mobile layout.',
   )
   const inheritanceSource = await apiFixture('technical', `/projects/${id}`)
   const inheritor = await pageFor('technical')
@@ -1788,8 +1886,7 @@ try {
       affectsKit: true,
     },
   )
-  await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
+  await reloadProject(scale, scaleProject.id)
   await scale.getByRole('tab', { name: '样机齐套', exact: true }).click()
   const readiness = scale.getByRole('group', {
     name: '齐套物料统计',
@@ -1942,8 +2039,7 @@ try {
   await externalDialog
     .getByRole('button', { name: '取消', exact: true })
     .click()
-  await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
+  await reloadProject(scale, scaleProject.id)
   await scale.getByRole('tab', { name: '样机齐套', exact: true }).click()
   await scale.setViewportSize({ width: 390, height: 844 })
   await addExternalButton.click()
@@ -2063,8 +2159,7 @@ try {
       actualCompleteDate: day,
     },
   )
-  await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
+  await reloadProject(scale, scaleProject.id)
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(1)
   await expect(table).toContainText('手机异常机壳')
@@ -2133,8 +2228,7 @@ try {
   await expect(table.locator('tbody tr')).toHaveCount(4)
   // Reopening the project resets its default; resize reacts until the user chooses a filter.
   await scale.setViewportSize({ width: 1440, height: 1000 })
-  await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
+  await reloadProject(scale, scaleProject.id)
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(4)
   await table.screenshot({ path: '/tmp/npi-bom-context-desktop.png' })
@@ -2163,8 +2257,7 @@ try {
       reason: '停止跟踪边界验证',
     })
   }
-  await scale.reload({ waitUntil: 'domcontentloaded' })
-  await scale.getByRole('button', { name: projectButton(scaleName) }).click()
+  await reloadProject(scale, scaleProject.id)
   await scale.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await expect(table.locator('tbody tr')).toHaveCount(0)
   await expect(
@@ -3539,10 +3632,7 @@ try {
   await motherPage
     .getByRole('button', { name: '保存为草稿', exact: true })
     .click()
-  await motherPage.reload()
-  await motherPage
-    .getByRole('button', { name: projectButton(motherDetail.name) })
-    .click()
+  await reloadProject(motherPage, motherDetail.id)
   await motherPage.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
   await motherPage
     .getByRole('button', { name: '恢复预览', exact: true })

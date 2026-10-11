@@ -1,0 +1,64 @@
+.npi-preparation-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.npi-preparation-switch button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 18px;
+  text-align: left;
+  color: #34445a;
+  cursor: pointer;
+}
+
+.npi-preparation-switch button[aria-pressed='true'] {
+  border-color: #2375df;
+  background: #eff6ff;
+  color: #185bb2;
+}
+
+.npi-preparation-switch button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.npi-preparation-switch span {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.npi-preparation-switch strong {
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+.npi-preparation-switch small {
+  color: #62718a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .npi-preparation-switch {
+    gap: 8px;
+  }
+
+  .npi-preparation-switch button {
+    padding: 12px;
+  }
+}
+
+@media (min-width: 761px) {
+  [aria-label='我的物料待办'] .npi-table td:nth-child(2),
+  [aria-label='我的物料待办'] .npi-table td:nth-child(3),
+  [aria-label='我的物料待办'] .npi-table td:nth-child(4) {
+    white-space: nowrap;
+  }
+}

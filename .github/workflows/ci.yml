@@ -53,3 +53,6 @@ jobs:
       - run: npm run test:issue-1
       - run: npm run test:trash
       - run: npm run test:quick-reply
+      - run: npm run test:workflow-guards
+      - run: npm run test:preparation-board
+      - run: npm run test:workflow-navigation

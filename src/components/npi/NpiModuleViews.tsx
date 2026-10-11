@@ -15,6 +15,7 @@ import {
 import { NpiPagination, usePagination } from './NpiPagination'
 import { NpiActivity } from './NpiActivity'
 import { NpiAssignedMaterials } from './NpiAssignedMaterials'
+import './preparation-board.css'
 import { stageLabels, stateLabels } from './navigation'
 import type { ArrivalWindow } from '../../lib/npi/procurement-arrival'
 import type { NpiDashboard, NpiMetadata } from '../../lib/npi/service'
@@ -228,6 +229,11 @@ export function NpiPreparationBoard({
   onComplete: (id: string) => void
   users?: NpiMetadata['users']
 }) {
+  const [taskGroup, setTaskGroup] = useState<'nodes' | 'materials'>('nodes')
+  const [materialCount, setMaterialCount] = useState<number | null>(null)
+  const hasPersonalMaterials =
+    mode === 'manufacturing' &&
+    ['technical', 'manufacturing'].includes(actor.role)
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState('unfinished'),
     [kind, setKind] = useState('all'),
@@ -329,14 +335,46 @@ export function NpiPreparationBoard({
   const pagination = usePagination(rows, 25, start)
   return (
     <>
-      {mode === 'manufacturing' && actor.role === 'manufacturing' && (
-        <NpiAssignedMaterials
-          actorId={actor.id}
-          revision={dashboard}
-          managedProjectIds={dashboard.projects.map((p) => p.id)}
-        />
+      {hasPersonalMaterials && (
+        <>
+          <div
+            className="npi-preparation-switch"
+            role="group"
+            aria-label="制造任务分类"
+          >
+            <button
+              type="button"
+              aria-pressed={taskGroup === 'nodes'}
+              onClick={() => setTaskGroup('nodes')}
+            >
+              <span>制造节点</span>
+              <small>工艺、工装、齐套与装配</small>
+            </button>
+            <button
+              type="button"
+              aria-pressed={taskGroup === 'materials'}
+              onClick={() => setTaskGroup('materials')}
+            >
+              <span>
+                部件任务{' '}
+                {materialCount !== null && <strong>{materialCount}</strong>}
+              </span>
+              <small>本人及同部门负责的BOM与临时物料</small>
+            </button>
+          </div>
+          <div hidden={taskGroup !== 'materials'}>
+            <NpiAssignedMaterials
+              actorId={actor.id}
+              revision={dashboard}
+              managedProjectIds={dashboard.projects.map((p) => p.id)}
+              scope="all"
+              onCount={setMaterialCount}
+            />
+          </div>
+        </>
       )}
       <section
+        hidden={hasPersonalMaterials && taskGroup !== 'nodes'}
         className="npi-panel"
         aria-label={
           mode === 'manufacturing' ? '制造四节点任务' : '采购物料任务'

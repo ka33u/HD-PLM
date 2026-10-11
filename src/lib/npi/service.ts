@@ -1160,6 +1160,22 @@ async function editableItem(
     )
   if (p.currentNpiStage === 'completed' && !allowCompletionRetry)
     throw new NpiError('INVALID_STATE_TRANSITION', '已完成项目为只读', 400)
+  // Every reply path must honor the same BOM baseline. Otherwise an old
+  // single-item dialog can complete a changed part and hide its pending review.
+  // Finished records remain available for the existing idempotent completion
+  // retry; writeCompletion still rejects any different actual date.
+  if (item.bomItemId && !item.actualCompleteDate) {
+    const [bom] = await tx
+      .select({ importId: s.npiBomItems.importId })
+      .from(s.npiBomItems)
+      .where(eq(s.npiBomItems.id, item.bomItemId))
+    if (!bom || bom.importId !== p.activeBomImportId)
+      throw new NpiError(
+        'BOM_REVIEW_REQUIRED',
+        `${item.name}的BOM已换版，请先由项目负责人复核`,
+        409,
+      )
+  }
   return { a, item, p }
 }
 async function writePromise(
@@ -1546,18 +1562,6 @@ export async function batchReplyMaterials(
           `${item.name}已完成，请重新读取后核对`,
           409,
         )
-      if (item.bomItemId) {
-        const [bom] = await tx
-          .select({ importId: s.npiBomItems.importId })
-          .from(s.npiBomItems)
-          .where(eq(s.npiBomItems.id, item.bomItemId))
-        if (!bom || bom.importId !== p.activeBomImportId)
-          throw new NpiError(
-            'BOM_REVIEW_REQUIRED',
-            `${item.name}的BOM已换版，请先由项目负责人复核`,
-            409,
-          )
-      }
       versionCheck(item.version, change.expectedVersion)
       try {
         const result =

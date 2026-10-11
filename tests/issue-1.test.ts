@@ -510,12 +510,90 @@ try {
     const shared = (await call('sharedBuyer', '/workbench/procurement')).items
     assert.equal(shared.length, 1)
     assert.equal(shared[0].ownerId, actors.procurement!.id)
+    assert.equal(shared[0].bomReference.current, false)
+    const staleTrackingId = trackingId
+    const blocked = await call(
+      'sharedBuyer',
+      `/tracking/${staleTrackingId}/promise`,
+      'POST',
+      {
+        expectedVersion: shared[0].version,
+        committedDate: '2026-11-06',
+        reason: '换版未复核不得直接改期',
+      },
+      409,
+    )
+    assert.equal(blocked.code, 'BOM_REVIEW_REQUIRED')
+    const review = await call(
+      'technical',
+      `/projects/${projectId}/bom/reconciliation`,
+    )
+    const currentRow = (await tree()).rows.find(
+      (row: any) => row.materialCode === 'B-NEW',
+    )
+    const candidate = review.items.find(
+      (row: any) => row.item.id === staleTrackingId,
+    )
+    assert.equal(candidate.suggestedId, null)
+    const reconciliation = {
+      trackingItemId: staleTrackingId,
+      expectedVersion: candidate.item.version,
+      expectedProjectVersion: review.projectVersion,
+      activeImportId: review.activeImportId,
+      reason: '物料已由B替换为B-NEW，旧任务保留历史，新料重新确认交期',
+    }
+    // Changed material codes must not silently inherit the old promise.
+    await call(
+      'technical',
+      `/projects/${projectId}/bom/reconciliation`,
+      'POST',
+      { ...reconciliation, action: 'migrate', targetBomItemId: currentRow.id },
+      409,
+    )
+    await call(
+      'technical',
+      `/projects/${projectId}/bom/reconciliation`,
+      'POST',
+      { ...reconciliation, action: 'retire' },
+    )
+    const replacement = await call(
+      'technical',
+      `/bom-items/${currentRow.id}/tracking`,
+      'PATCH',
+      {
+        ownerId: actors.procurement!.id,
+        requiredDate: '2026-11-08',
+        trackingEnabled: true,
+        affectsKit: true,
+        expectedVersion: 0,
+      },
+    )
+    trackingId = replacement.id
+    assert.notEqual(trackingId, staleTrackingId)
+    assert.equal(replacement.firstCommittedDate, null)
+    await call('procurement', `/tracking/${trackingId}/promise`, 'POST', {
+      expectedVersion: replacement.version,
+      committedDate: '2026-11-07',
+      reason: '向供应商重新确认替代物料交期',
+    })
+    const currentShared = (await call('sharedBuyer', '/workbench/procurement'))
+      .items
+    assert.equal(currentShared.length, 1)
+    assert.equal(currentShared[0].id, trackingId)
+    assert.equal(currentShared[0].bomReference.current, true)
+    const retired = (await project()).items.find(
+      (item: any) => item.id === staleTrackingId,
+    )
+    assert.equal(retired.trackingEnabled, false)
+    assert.equal(retired.affectsKit, false)
+    assert.equal(retired.firstCommittedDate, '2026-11-07')
+    assert.equal(retired.currentCommittedDate, '2026-11-07')
     const saved = await call(
       'sharedBuyer',
       `/tracking/${trackingId}/promise`,
       'POST',
       {
-        expectedVersion: shared[0].version,
+        expectedVersion: currentShared[0].version,
         committedDate: '2026-11-06',
         reason: '同组成员跟进供应商',
       },
@@ -746,6 +824,40 @@ try {
           await expect(
             page.getByRole('table', { name: '完整BOM明细' }),
           ).toContainText('在线修改规格')
+          const staleBuyerContext = await browser.newContext()
+          await staleBuyerContext.addCookies([
+            { name: 'session', value: actors.procurement!.token, url: root },
+          ])
+          try {
+            const staleBuyerPage = await staleBuyerContext.newPage()
+            await staleBuyerPage.goto(root + '/npi')
+            const oldRow = staleBuyerPage.locator(
+              `[data-npi-item="${trackingId}"]`,
+            )
+            await expect(oldRow).toContainText('待BOM复核，请项目负责人处理')
+            await expect(
+              oldRow.getByRole('button', { name: /^(回复|改期|到货)$/ }),
+            ).toHaveCount(0)
+          } finally {
+            await staleBuyerContext.close()
+          }
+          // The revised specification requires a new supplier confirmation.
+          // Explicitly retire the old task before assigning a replacement.
+          await page
+            .getByTestId('bom-reconciliation')
+            .locator('.npi-review-item')
+            .filter({ hasText: '轴承 · B-NEW' })
+            .getByRole('button', { name: '停止旧跟踪', exact: true })
+            .click()
+          await page
+            .getByRole('dialog')
+            .getByLabel('换版复核原因', { exact: true })
+            .fill('规格变更，旧任务保留历史，新任务重新向供应商确认交期')
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: '保存', exact: true })
+            .click()
+          await expect(page.getByRole('dialog')).toHaveCount(0)
           await page
             .getByRole('button', { name: '分配采购', exact: true })
             .click()
@@ -760,7 +872,7 @@ try {
           await expect(page.getByRole('dialog')).toHaveCount(0)
           assert.equal(
             (await call('procurement', '/workbench/procurement')).items.length,
-            2,
+            1,
           )
         }
         await context.close()
@@ -814,11 +926,72 @@ try {
       await expect(
         sharedPage.getByRole('heading', { name: '我的采购件', exact: true }),
       ).toBeVisible()
+      const sharedTasks = (await call('sharedBuyer', '/workbench/procurement'))
+        .items
+      assert.equal(sharedTasks.length, 1)
+      assert.ok(!sharedTasks.some((item: any) => item.id === trackingId))
+      const retiredTask = (await project()).items.find(
+        (item: any) => item.id === trackingId,
+      )
+      const currentTask = sharedTasks.find(
+        (item: any) => item.bomReference?.current,
+      )
+      assert.equal(retiredTask.trackingEnabled, false)
+      assert.equal(retiredTask.affectsKit, false)
+      assert.equal(retiredTask.firstCommittedDate, '2026-11-07')
+      assert.equal(retiredTask.currentCommittedDate, '2026-11-06')
+      assert.equal(currentTask.firstCommittedDate, null)
       await expect(
-        sharedPage.getByRole('button', { name: '改期', exact: true }),
+        sharedPage.locator(`[data-npi-item="${trackingId}"]`),
+      ).toHaveCount(0)
+      const currentRow = sharedPage.locator(
+        `[data-npi-item="${currentTask.id}"]`,
+      )
+      await currentRow
+        .getByRole('button', { name: '回复', exact: true })
+        .click()
+      const replyDialog = sharedPage.getByRole('dialog')
+      await replyDialog
+        .getByLabel('预计到货日期', { exact: true })
+        .fill('2026-11-07')
+      await replyDialog
+        .getByRole('button', { name: '保存回复', exact: true })
+        .click()
+      await expect(replyDialog).toHaveCount(0)
+      await expect(
+        currentRow.getByRole('button', { name: '改期', exact: true }),
       ).toBeVisible()
+      await currentRow
+        .getByRole('button', { name: '改期', exact: true })
+        .click()
+      await replyDialog
+        .getByLabel('预计到货日期', { exact: true })
+        .fill('2026-11-06')
+      await replyDialog
+        .getByLabel('变更原因（必填）', { exact: true })
+        .fill('同部门成员核对新版交期并提前到货')
+      await replyDialog
+        .getByRole('button', { name: '保存回复', exact: true })
+        .click()
+      await expect(replyDialog).toHaveCount(0)
+      const sharedSaved = (
+        await call('sharedBuyer', '/workbench/procurement')
+      ).items.find((item: any) => item.id === currentTask.id)
+      assert.equal(sharedSaved.ownerId, actors.procurement!.id)
+      assert.equal(sharedSaved.firstCommittedDate, '2026-11-07')
+      assert.equal(sharedSaved.currentCommittedDate, '2026-11-06')
+      const sharedHistory = await db
+        .select()
+        .from(s.npiPromiseHistory)
+        .where(eq(s.npiPromiseHistory.objectId, currentTask.id))
+      assert.equal(sharedHistory.length, 2)
+      assert.ok(
+        sharedHistory.every(
+          (entry) => entry.changedBy === actors.sharedBuyer!.id,
+        ),
+      )
       await expect(
-        sharedPage.getByRole('button', { name: '到货', exact: true }).first(),
+        currentRow.getByRole('button', { name: '到货', exact: true }),
       ).toBeVisible()
       await sharedContext.close()
       await adminContext.close()

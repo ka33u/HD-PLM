@@ -19,6 +19,14 @@
 - 管理员在“系统设置 → 部门协作分组”维护制造 / 采购部门，同岗位成员共享任务，保留主负责人及实际办理人审计。
 - 独立项目回收站 `/npi/trash`：关键词、负责人、阶段及删除日期筛选，分页、删除详情和单个 / 批量恢复；移动端采用项目卡片。
 
+## 从 2.4 升级到 2.5
+
+保留现有 `.env`，备份数据库与附件，执行 `git pull --ff-only`、`npm ci`、`npm run build` 后重启服务。2.5 没有新增数据库迁移。
+
+项目概览按设计、制造、样机、试验、完成五阶段显示当前工作、协同负责人和下一步入口。阶段推进、日常任务与项目管理分别展示；结项前提醒检查未结问题和未跟踪物料。项目和页签写入地址，刷新、浏览器前进后退可恢复位置，打开填写窗口时阻止后退丢失输入。
+
+制造准备将“制造节点”和“部件任务”分开，部件任务覆盖本项目及跨项目的本人 / 部门任务，可切换未完成、已完成与全部。制造四节点统一使用集中窗口回复，支持取消、关闭、Escape 与刷新草稿保护。BOM 换版未复核的旧部件在单项和批量入口均阻止承诺及完成，技术复核后恢复办理。
+
 ## 从 2.3 升级到 2.4
 
 保留现有 `.env` 并备份数据库与附件，执行 `git pull --ff-only`、`npm ci`、`npm run build` 后重启服务。2.4 没有新增数据库迁移。
@@ -90,6 +98,9 @@ npm run test:browser
 npm run test:issue-1
 npm run test:trash
 npm run test:quick-reply
+npm run test:workflow-guards
+npm run test:preparation-board
+npm run test:workflow-navigation
 ```
 
 业务浏览器回归使用已构建产物。测试数据留在测试库用于核对。真实 ERP 样本可通过 `NPI_SAMPLE_DIR` 指定，不进入代码仓库。GitHub Actions 在 Windows / Linux 验证干净安装、构建、别名模块唯一性和桌面 / 手机首屏，另外运行 PostgreSQL 接口回归。

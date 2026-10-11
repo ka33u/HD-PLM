@@ -26,10 +26,14 @@ export function NpiAssignedMaterials({
   actorId,
   revision,
   managedProjectIds,
+  scope = 'other-projects',
+  onCount,
 }: {
   actorId: string
   revision: object
   managedProjectIds: Array<string>
+  scope?: 'all' | 'other-projects'
+  onCount?: (count: number) => void
 }) {
   const [data, setData] = useState<Work | null>(null)
   const [loading, setLoading] = useState(true),
@@ -96,18 +100,24 @@ export function NpiAssignedMaterials({
       generation.current++
     }
   }, [refresh, revision])
-  const delegated = useMemo(() => {
+  const scopedItems = useMemo(() => {
     const managed = new Set(managedProjectIds)
-    return (data?.items || []).filter((item) => !managed.has(item.programId))
-  }, [data, managedProjectIds])
+    return (data?.items || []).filter(
+      (item) => scope === 'all' || !managed.has(item.programId),
+    )
+  }, [data, managedProjectIds, scope])
+  useEffect(() => {
+    if (data) onCount?.(scopedItems.length)
+  }, [data, scopedItems, onCount])
   const rows = useMemo(
     () =>
-      delegated
+      scopedItems
         .filter(
           (item) =>
             (filter === 'all' ||
               (filter === 'unfinished'
-                ? !item.actualCompleteDate
+                ? !item.actualCompleteDate &&
+                  item.currentNpiStage !== 'completed'
                 : item.status === filter)) &&
             [
               item.name,
@@ -135,7 +145,7 @@ export function NpiAssignedMaterials({
             a.id.localeCompare(b.id)
           )
         }),
-    [delegated, filter, search],
+    [scopedItems, filter, search],
   )
   const page = usePagination(rows, 20, start)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -171,14 +181,22 @@ export function NpiAssignedMaterials({
       setSaving(false)
     }
   }
-  if (!loading && !loadError && !delegated.length) return null
+  if (
+    scope === 'other-projects' &&
+    !loading &&
+    !loadError &&
+    !scopedItems.length
+  )
+    return null
   return (
     <section ref={start} className="npi-panel" aria-label="我的物料待办">
       <div className="npi-panel-title">
         <div>
-          <h2>我的协作物料</h2>
+          <h2>{scope === 'all' ? '我的部件任务' : '我的协作物料'}</h2>
           <p>
-            其他项目分给我的BOM物料、临时样机件和其他物料，可直接回复与确认完成。
+            {scope === 'all'
+              ? '本人及同岗位部门成员负责的全部部件，覆盖本项目和跨项目协作；制造四节点在“制造节点”中处理。'
+              : '其他项目分给本人及同岗位部门成员的BOM物料、临时样机件和其他物料，可直接回复与确认完成。'}
           </p>
         </div>
         <button
@@ -225,7 +243,11 @@ export function NpiAssignedMaterials({
       </div>
       {loading && <p role="status">正在刷新物料待办…</p>}
       {!loading && !loadError && !rows.length && (
-        <p className="npi-muted">没有符合条件的物料。</p>
+        <p className="npi-module-empty">
+          {scopedItems.length
+            ? '没有符合条件的部件，请调整搜索或状态；已完成记录可切换“已完成”查看。'
+            : '暂无已分配的部件任务。项目负责人在BOM中指定回复责任人后，任务会出现在这里。'}
+        </p>
       )}
       <NpiPagination
         {...page}
@@ -269,7 +291,7 @@ export function NpiAssignedMaterials({
                       !item.bomReference.current &&
                       !item.actualCompleteDate && (
                         <small className="npi-warning-text">
-                          BOM已换版，请在承诺历史中查看物料对照。
+                          待BOM复核，请项目负责人处理；原承诺和历史保留。
                         </small>
                       )}
                   </td>
@@ -288,6 +310,7 @@ export function NpiAssignedMaterials({
                   <td data-label="操作">
                     <div className="npi-actions">
                       {!item.actualCompleteDate &&
+                        (!item.bomReference || item.bomReference.current) &&
                         item.currentNpiStage !== 'completed' && (
                           <>
                             <button
