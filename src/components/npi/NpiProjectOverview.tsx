@@ -44,11 +44,13 @@ export function NpiProjectOverview({
   const owner = (id: string) =>
     meta.users.find((u) => u.id === id)?.name || '未命名'
   const latest = project.imports.find((i) => i.id === project.activeBomImportId)
-  const nodes = Object.entries(nodeNames).map(([type, label]) => ({
-    type,
-    label,
-    item: project.items.find((i) => i.trackingType === type),
-  }))
+  const nodes = [
+    {
+      type: 'assembly',
+      label: '整机完成',
+      item: project.items.find((i) => i.sourceType === 'WHOLE_MACHINE'),
+    },
+  ]
   const gap = dateGap(project.kit.predictedKitDate, project.requiredKitDate)
 
   return (
@@ -56,12 +58,12 @@ export function NpiProjectOverview({
       <div className="npi-overview-top">
         <section className="npi-panel">
           <div className="npi-panel-title">
-            <h2>关键节点</h2>
+            <h2>整机交付</h2>
             <button
               className="npi-project-link"
               onClick={() => onTab('manufacturing')}
             >
-              制造准备 <ArrowUpRight size={15} />
+              交付任务 <ArrowUpRight size={15} />
             </button>
           </div>
           <div className="npi-node-strip">
@@ -88,7 +90,7 @@ export function NpiProjectOverview({
             ))}
           </div>
           <p className="npi-list-summary">
-            节点优先显示实际完成日期；尚未完成时显示当前承诺。
+            整机优先显示实际完成日期；尚未完成时显示预计完成时间。零部件与工装在交付任务中逐项回复。
           </p>
         </section>
         <section className="npi-panel npi-overview-target">
@@ -101,9 +103,9 @@ export function NpiProjectOverview({
           </strong>
           <span>
             {project.kit.allRelevantCompleted
-              ? '影响齐套的物料和节点均已完成'
+              ? '零部件和工装均已完成'
               : gap == null
-                ? '取得关键项承诺后计算'
+                ? '取得零部件与工装的日期后计算'
                 : gap > 0
                   ? `较要求齐套晚 ${gap} 天`
                   : gap < 0
@@ -154,7 +156,7 @@ export function NpiProjectOverview({
               ['制造负责人', owner(project.manufacturingOwnerId)],
               ['要求齐套日期', project.requiredKitDate],
               [
-                '制造承诺齐套',
+                '整机承诺完成',
                 project.kit.manufacturingCommittedKitDate || '待回复',
               ],
               [

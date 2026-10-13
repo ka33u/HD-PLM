@@ -6,6 +6,7 @@ import { db } from '../db'
 import * as s from '../db/schema/npi'
 import { defaultTemplate } from './bom'
 import { normalizeBomQuantity } from './bom-quantity'
+import { ensureBomDeliveryTasks } from './delivery-tasks'
 import { carryUnchangedTracking } from './bom-carry'
 import { NpiError, dateValue, textValue } from './domain'
 import {
@@ -172,6 +173,7 @@ export async function reviseBom(
       .update(s.npiProjects)
       .set({ activeBomImportId: record!.id, version: project.version + 1 })
       .where(eq(s.npiProjects.programId, id))
+    await ensureBomDeliveryTasks(tx, id)
     await event(tx, actor, id, record!.id, 'BOM_REVISED', {
       reason,
       action: input.action,

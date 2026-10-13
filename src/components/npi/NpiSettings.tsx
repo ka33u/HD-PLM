@@ -4,7 +4,6 @@ import { AccountManager } from '../accounts/AccountManager'
 import { useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Plus } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs'
-import { nodeNames } from '../../lib/npi/domain'
 import { NpiPagination, usePagination } from './NpiPagination'
 import { moduleInfo, stageLabels } from './navigation'
 import type { NpiMetadata } from '../../lib/npi/service'
@@ -154,12 +153,14 @@ export function NpiSettings({
                   <dd>{Object.values(stageLabels).join(' → ')}</dd>
                 </div>
                 <div>
-                  <dt>制造四节点</dt>
-                  <dd>{Object.values(nodeNames).join('、')}</dd>
+                  <dt>交付任务</dt>
+                  <dd>所有BOM零部件、手工工装、BOM外零件、整机</dd>
                 </div>
                 <div>
                   <dt>物料完成口径</dt>
-                  <dd>按跟踪物料的实际完成情况统计；未跟踪BOM物料单列。</dd>
+                  <dd>
+                    全部BOM零部件和手工明细按实际完成情况统计，整机单独回复。
+                  </dd>
                 </div>
                 <div>
                   <dt>齐套预测</dt>

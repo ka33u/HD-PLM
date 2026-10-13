@@ -33,8 +33,6 @@ const headers = [
   '当前承诺',
   '实际完成',
   '状态',
-  '重点跟踪',
-  '影响齐套',
   '承诺修改次数',
   '供应商',
   '备注',
@@ -69,8 +67,8 @@ export async function buildKitWorkbook({
   const summary = [
     `${project.code || ''} ${project.name} · 样机齐套物料`,
     `范围：${scope} · ${items.length}项 · 导出时间：${exportedAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}（北京时间）`,
-    `要求齐套：${project.requiredKitDate} · 制造承诺：${project.kit.manufacturingCommittedKitDate || '待回复'} · 系统预测：${project.kit.predictedKitDate || (project.kit.allRelevantCompleted ? '已齐备' : '暂无')}${predictionNote(project.kit) ? `（${predictionNote(project.kit)}）` : ''}`,
-    '清单为当前筛选的物料跟踪记录；已满足／缺料按实际完成记录计项，不代表库存数量。',
+    `要求齐套：${project.requiredKitDate} · 整机承诺：${project.kit.manufacturingCommittedKitDate || '待回复'} · 系统预测：${project.kit.predictedKitDate || (project.kit.allRelevantCompleted ? '已齐备' : '暂无')}${predictionNote(project.kit) ? `（${predictionNote(project.kit)}）` : ''}`,
+    '清单为当前筛选的零部件和工装记录；已满足／缺料按实际完成记录计项，不代表库存数量。',
   ]
   summary.forEach((text, i) => {
     sheet.addRow([text])
@@ -78,8 +76,8 @@ export async function buildKitWorkbook({
   })
   sheet.addRow(headers)
   const widths = [
-    8, 20, 26, 30, 15, 22, 12, 12, 12, 24, 10, 16, 14, 14, 14, 14, 12, 12, 12,
-    16, 24, 36, 24,
+    8, 20, 26, 30, 15, 22, 12, 12, 12, 24, 10, 16, 14, 14, 14, 14, 12, 16, 24,
+    36, 24,
   ]
   sheet.columns.forEach((col, i) => {
     col.width = widths[i] || 16
@@ -114,7 +112,11 @@ export async function buildKitWorkbook({
       ref?.materialCode || '',
       item.name,
       item.specification,
-      item.sourceType === 'ERP_BOM' ? 'ERP BOM' : 'BOM外物料',
+      item.sourceType === 'ERP_BOM'
+        ? 'ERP BOM'
+        : item.sourceType === 'TOOLING'
+          ? '工装明细'
+          : 'BOM外零件',
       typeNames[item.trackingType] || item.trackingType,
       ref ? `V${ref.versionNo}` : '',
       ref?.rowNo ?? '',
@@ -127,8 +129,6 @@ export async function buildKitWorkbook({
       item.currentCommittedDate || '',
       item.actualCompleteDate || '',
       statusNames[item.status] || item.status,
-      item.trackingEnabled ? '是' : '否',
-      item.affectsKit ? '是' : '否',
       item.changeCount || 0,
       item.supplier,
       item.remark,

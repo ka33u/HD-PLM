@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "2.5.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -18,7 +18,7 @@
     "test": "node --import tsx --test tests/npi-unit.test.ts tests/npi-file-validation.test.ts tests/build-config.test.ts tests/workspace-location.test.ts",
     "test:http": "node --import tsx tests/npi-http.test.ts",
     "test:auth": "node --import tsx --test tests/auth.test.ts",
-    "test:browser": "node --import tsx tests/npi-bom-browser.test.ts",
+    "test:browser": "node --import tsx --test tests/delivery-browser.test.ts",
     "test:smoke": "playwright test",
     "format": "prettier --write src scripts tests vite.config.ts",
     "test:files": "node --import tsx --test tests/files.test.ts",
@@ -32,7 +32,8 @@
     "test:quick-reply": "node --import tsx --test tests/quick-reply.test.ts",
     "test:workflow-guards": "node --import tsx --test tests/workflow-guards.test.ts",
     "test:preparation-board": "node --import tsx --test tests/preparation-board.test.ts",
-    "test:workflow-navigation": "node --import tsx --test tests/workflow-navigation.test.ts"
+    "test:workflow-navigation": "node --import tsx --test tests/workflow-navigation.test.ts",
+    "test:delivery": "node --import tsx --test tests/delivery.test.ts tests/delivery-migration.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",

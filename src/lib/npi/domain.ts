@@ -144,6 +144,7 @@ export function kitStatus(
   requiredKitDate: string,
   manufacturingCommittedKitDate: string | null,
   day = today(),
+  completionRequiredDate = requiredKitDate,
 ) {
   const counts: Record<Status, number> = {
     pending_reply: 0,
@@ -159,6 +160,7 @@ export function kitStatus(
   const relevant = items.filter(
     (i) =>
       i.affectsKit &&
+      i.sourceType !== 'WHOLE_MACHINE' &&
       !i.actualCompleteDate &&
       i.trackingType !== 'kit' &&
       i.trackingType !== 'assembly',
@@ -177,7 +179,7 @@ export function kitStatus(
   if (pending.length)
     alerts.push({
       code: 'PENDING_REPLY',
-      message: `仍有${pending.length}项影响齐套的物料或节点未回复，预测不完整`,
+      message: `仍有${pending.length}项影响齐套的零部件或工装未回复，预测不完整`,
     })
   if (
     predictedKitDate &&
@@ -186,15 +188,15 @@ export function kitStatus(
   )
     alerts.push({
       code: 'DETAIL_VS_COMMIT_CONFLICT',
-      message: '明细预测晚于制造承诺齐套日期',
+      message: '零部件齐套预测晚于整机完成承诺',
     })
   if (
     manufacturingCommittedKitDate &&
-    manufacturingCommittedKitDate > requiredKitDate
+    manufacturingCommittedKitDate > completionRequiredDate
   )
     alerts.push({
       code: 'KIT_COMMIT_RISK',
-      message: '制造承诺晚于要求齐套日期',
+      message: '整机完成承诺晚于整机要求日期',
     })
   return {
     requiredKitDate,

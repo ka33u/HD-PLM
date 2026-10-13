@@ -65,6 +65,23 @@ async function call(
   data?: unknown,
   status = 200,
 ): Promise<any> {
+  if (
+    method === 'PATCH' &&
+    /^\/bom-items\/[^/]+\/tracking$/.test(path) &&
+    status === 200 &&
+    (data as any)?.expectedVersion === 0
+  ) {
+    const { sql } = await import('drizzle-orm')
+    const rows = await db.execute(
+      sql`select version from npi_tracking_items where bom_item_id=${path.split('/')[2]!}`,
+    )
+    if (rows[0])
+      data = {
+        ...(data as object),
+        expectedVersion: rows[0].version,
+        reason: '测试夹具分配已自动生成的任务',
+      }
+  }
   const a = actors[role]!,
     form = data instanceof FormData
   const response = await app.request(root + '/api/v1/npi' + path, {
@@ -236,27 +253,12 @@ try {
       reason: '供应商确认',
     })
   })
-  await test('Excel reimports require a review that retains original commitments', async () => {
+  await test('Identical Excel reimports carry every task and retain original commitments', async () => {
     await importWorkbook()
-    const review = await call(
-      'technical',
-      `/projects/${projectId}/bom/reconciliation`,
-    )
-    assert.equal(review.items.length, 1)
-    const r = review.items[0]
-    await call(
-      'technical',
-      `/projects/${projectId}/bom/reconciliation`,
-      'POST',
-      {
-        action: 'migrate',
-        trackingItemId: r.item.id,
-        expectedVersion: r.item.version,
-        expectedProjectVersion: review.projectVersion,
-        activeImportId: review.activeImportId,
-        targetBomItemId: r.suggestedId,
-        reason: '核对原位置与数量一致',
-      },
+    assert.equal(
+      (await call('technical', `/projects/${projectId}/bom/reconciliation`))
+        .items.length,
+      0,
     )
     const t = (await project()).items.find((t: any) => t.id === trackingId)
     assert.equal(t.firstCommittedDate, '2026-11-07')
@@ -296,7 +298,7 @@ try {
     assert.equal(
       (await call('technical', `/projects/${projectId}/bom/reconciliation`))
         .items.length,
-      1,
+      2,
     )
   })
   await test('Online editing produces immutable versions and exports revised content; changed-code tracking stays on the old item', async () => {
@@ -608,7 +610,7 @@ try {
     await call('sharedBuyer', `/files/tracking/${trackingId}`)
     const p = await call('sharedMfg', `/projects/${projectId}`)
     assert.equal((await call('sharedMfg', '/dashboard')).projects.length, 1)
-    const node = p.items.find((i: any) => i.trackingType === 'process')
+    const node = p.items.find((i: any) => i.sourceType === 'WHOLE_MACHINE')
     await call('sharedMfg', `/tracking/${node.id}/promise`, 'POST', {
       expectedVersion: node.version,
       committedDate: '2026-11-05',
@@ -764,9 +766,9 @@ try {
           .getByRole('dialog')
           .getByRole('button', { name: '关闭弹窗', exact: true })
           .click()
-        await page.getByRole('tab', { name: '制造准备', exact: true }).click()
+        await page.getByRole('tab', { name: '交付任务', exact: true }).click()
         await page
-          .getByRole('button', { name: '工艺准备附件资料', exact: true })
+          .getByRole('button', { name: '整机完成附件资料', exact: true })
           .click()
         await expect(
           page.getByRole('dialog').getByRole('region', { name: '附件资料' }),
@@ -793,10 +795,8 @@ try {
           path: `runtime/test-evidence/issue-1-reports-${mobile ? 'mobile' : 'desktop'}.png`,
           fullPage: true,
         })
-        await nav.getByRole('button', { name: '制造准备', exact: true }).click()
-        await expect(page.locator('[data-npi-task]').first()).toContainText(
-          model,
-        )
+        await nav.getByRole('button', { name: '生产任务', exact: true }).click()
+        await expect(page.locator('main')).toContainText(model)
         assert.ok(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth,
@@ -847,7 +847,7 @@ try {
             .getByTestId('bom-reconciliation')
             .locator('.npi-review-item')
             .filter({ hasText: '轴承 · B-NEW' })
-            .getByRole('button', { name: '停止旧跟踪', exact: true })
+            .getByRole('button', { name: '归档旧任务', exact: true })
             .click()
           await page
             .getByRole('dialog')
@@ -859,12 +859,16 @@ try {
             .click()
           await expect(page.getByRole('dialog')).toHaveCount(0)
           await page
-            .getByRole('button', { name: '分配采购', exact: true })
+            .getByRole('button', { name: '转交采购', exact: true })
             .click()
           await page
             .getByRole('dialog')
             .getByLabel('回复责任人', { exact: true })
             .selectOption(actors.procurement!.id)
+          await page
+            .getByRole('dialog')
+            .getByLabel('调整原因', { exact: true })
+            .fill('新版任务转交采购确认')
           await page
             .getByRole('dialog')
             .getByRole('button', { name: '保存', exact: true })

@@ -66,6 +66,23 @@ async function call(
   data?: unknown,
   status = 200,
 ): Promise<any> {
+  if (
+    method === 'PATCH' &&
+    /^\/bom-items\/[^/]+\/tracking$/.test(path) &&
+    status === 200 &&
+    (data as any)?.expectedVersion === 0
+  ) {
+    const { sql } = await import('drizzle-orm')
+    const rows = await db.execute(
+      sql`select version from npi_tracking_items where bom_item_id=${path.split('/')[2]!}`,
+    )
+    if (rows[0])
+      data = {
+        ...(data as object),
+        expectedVersion: rows[0].version,
+        reason: '测试夹具分配已自动生成的任务',
+      }
+  }
   const a = actors[role]!,
     form = data instanceof FormData
   const response = await app.request(root + '/api/v1/npi' + path, {
@@ -84,6 +101,10 @@ async function call(
 }
 let projectId = ''
 const getItems = async (role = 'manufacturing', kind = 'manufacturing') =>
+  (await call(role, '/workbench/quick-replies?kind=' + kind)).items.filter(
+    (i: any) => i.sourceType !== 'WHOLE_MACHINE',
+  ) as any[]
+const getAllItems = async (role = 'manufacturing', kind = 'manufacturing') =>
   (await call(role, '/workbench/quick-replies?kind=' + kind)).items as any[]
 const payload = (
   items: any[],
@@ -409,14 +430,13 @@ try {
     )
     const rest = (await getItems())[0]
     const node = (await savedItems()).find(
-      (r) => r.sourceType === 'MANUFACTURING',
+      (r) => r.sourceType === 'WHOLE_MACHINE',
     )
     await call(
       'manufacturing',
       '/tracking/batch-reply',
       'POST',
       payload([node]),
-      422,
     )
     await db
       .update(s.npiTrackingItems)
@@ -491,7 +511,7 @@ try {
       page.on('pageerror', (e) => errors.push(e.message))
       await page.goto(root + '/npi?view=manufacturing')
       await page
-        .getByRole('button', { name: '部件快速回复', exact: true })
+        .getByRole('button', { name: '完成时间快速回复', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
       const rowDates = dialog.locator('tbody input[type=date]')
@@ -540,7 +560,12 @@ try {
       await expect(dialog.locator('.npi-message[role=status]')).toContainText(
         '已回复 3 个部件',
       )
-      const persisted = await getItems()
+      const persisted = (
+        await call(
+          'manufacturing',
+          '/workbench/quick-replies?kind=manufacturing',
+        )
+      ).items
       for (let i = 0; i < 3; i++)
         assert.equal(
           persisted.find((r) => r.id === ids[i]).currentCommittedDate,
@@ -578,7 +603,7 @@ try {
         .locator('tbody tr')
         .first()
         .getAttribute('data-quick-item')
-      const before = (await getItems()).find((r) => r.id === id)
+      const before = (await getAllItems()).find((r) => r.id === id)
       await rowDates.first().fill('2026-11-15')
       await expect(
         dialog.getByRole('button', { name: '提交 1 项回复', exact: true }),
@@ -658,7 +683,7 @@ try {
       phone.on('pageerror', (e) => errors.push(e.message))
       await phone.goto(root + '/npi')
       await phone
-        .getByRole('button', { name: '部件快速回复', exact: true })
+        .getByRole('button', { name: '完成时间快速回复', exact: true })
         .click()
       const d = phone.getByRole('dialog'),
         picks = d.locator('tbody input[type=checkbox]')
@@ -718,10 +743,10 @@ try {
       const sp = await limited.newPage()
       await sp.goto(root + '/npi?view=manufacturing')
       await expect(
-        sp.getByRole('heading', { name: '制造准备', exact: true }),
+        sp.getByRole('heading', { name: '生产任务', exact: true }),
       ).toBeVisible()
       await expect(
-        sp.getByRole('button', { name: '部件快速回复', exact: true }),
+        sp.getByRole('button', { name: '完成时间快速回复', exact: true }),
       ).toHaveCount(0)
       await limited.close()
       const admin = await browser.newContext()
@@ -732,7 +757,7 @@ try {
       await ap.goto(root + '/npi?view=bom')
       await ap.getByRole('button', { name: '进入BOM ↗', exact: true }).click()
       await ap
-        .getByRole('button', { name: '生产部件快速回复', exact: true })
+        .getByRole('button', { name: '生产完成时间快速回复', exact: true })
         .click()
       await expect(ap.getByRole('dialog').locator('tbody tr')).toHaveCount(0)
       await ap
@@ -745,10 +770,10 @@ try {
         .getByRole('button', { name: '关闭', exact: true })
         .click()
       await ap
-        .getByRole('button', { name: '采购部件快速回复', exact: true })
+        .getByRole('button', { name: '采购完成时间快速回复', exact: true })
         .click()
       await expect(ap.getByRole('dialog').getByRole('heading')).toHaveText(
-        '采购部件快速回复',
+        '采购完成时间快速回复',
       )
       await admin.close()
 

@@ -250,7 +250,7 @@ export function NpiProjectChange({
                 </label>
               </div>
               <p>
-                原技术/制造负责人名下的未完成非采购物料和未关闭问题随职责转交；采购件仍按采购责任人管理。制造四节点由新制造负责人统一负责，已单独调整或已完成节点的要求日期会保留。
+                原技术/制造负责人名下的未完成非采购物料和未关闭问题随职责转交；采购件仍按采购责任人管理。整机任务由新制造负责人办理，单独调整或已完成的要求日期保留。
               </p>
               <div className="npi-actions">
                 <button
@@ -277,7 +277,7 @@ export function NpiProjectChange({
                 {!preview.changes.length &&
                   !preview.tracking.length &&
                   !preview.issues.length && <p>没有需要修改的内容。</p>}
-                <h3>制造节点与物料 · {preview.tracking.length} 项</h3>
+                <h3>整机与零部件 · {preview.tracking.length} 项</h3>
                 {preview.tracking.map((t) => (
                   <p key={t.id}>
                     <strong>{t.name}</strong>

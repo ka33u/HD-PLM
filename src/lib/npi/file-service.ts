@@ -52,7 +52,7 @@ async function access(
     ownerId = t.trackingType === 'purchase' ? t.ownerId : null
     assignedMaterial =
       ['technical', 'manufacturing'].includes(actor.role) &&
-      ['material', 'other'].includes(t.trackingType) &&
+      ['material', 'other', 'assembly'].includes(t.trackingType) &&
       ownsWork(actor, t.ownerId)
     active = t.trackingEnabled || t.affectsKit
   } else if (scope.kind === 'issue') {

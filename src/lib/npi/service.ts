@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ensureBomDeliveryTasks } from './delivery-tasks'
+import { carryUnchangedTracking } from './bom-carry'
 import { ownsWork } from './work-ownership'
 import { createHash } from 'node:crypto'
 import {
@@ -306,19 +308,20 @@ export async function createProjectInTransaction(
     .values({ programId: p.id, updatedBy: actor.id })
     .returning()
   if (!plan) throw new Error('Plan creation failed')
-  await tx.insert(s.npiTrackingItems).values(
-    (Object.keys(nodeNames) as Array<NodeType>).map((type) => ({
-      programId: p.id,
-      manufacturingPlanId: plan.id,
-      sourceType: 'MANUFACTURING',
-      trackingType: type,
-      name: nodeNames[type],
-      ownerId: mfg.id,
-      requiredDate:
-        type === 'assembly' ? prototypeRequiredDate : requiredKitDate,
-      affectsKit: type === 'process' || type === 'tooling',
-    })),
-  )
+  await tx.insert(s.npiTrackingItems).values({
+    programId: p.id,
+    manufacturingPlanId: plan.id,
+    sourceType: 'WHOLE_MACHINE',
+    trackingType: 'assembly',
+    name: '整机完成',
+    specification: model,
+    qty: '1',
+    unit: '台',
+    ownerId: mfg.id,
+    requiredDate: prototypeRequiredDate,
+    affectsKit: false,
+    trackingEnabled: true,
+  })
   await event(tx, actor, p.id, p.id, 'PROJECT_CREATED', {
     name,
     code,
@@ -375,7 +378,10 @@ function projectSnapshot(
   const kit = kitStatus(
     items,
     p.requiredKitDate,
-    items.find((i) => i.trackingType === 'kit')?.currentCommittedDate ?? null,
+    items.find((i) => i.sourceType === 'WHOLE_MACHINE')?.currentCommittedDate ??
+      null,
+    today(),
+    p.prototypeRequiredDate,
   )
   const needsReview = rows.filter(
     ({ item, bomImportId }) =>
@@ -760,7 +766,7 @@ async function personalMaterials(
         !(quick && actor.role === 'admin')
       )
         return denied()
-      const types = assigned ? ['material', 'other'] : ['purchase']
+      const types = assigned ? ['material', 'other', 'assembly'] : ['purchase']
       const rows = await tx
         .select({
           item: s.npiTrackingItems,
@@ -897,7 +903,7 @@ export async function trackingHistory(userId: string, id: string) {
           return denied()
       } else if (!(
         ownsWork(actor, item.ownerId) &&
-        ['material', 'other'].includes(item.trackingType) &&
+        ['material', 'other', 'assembly'].includes(item.trackingType) &&
         ['technical', 'manufacturing'].includes(actor.role)
       ))
         await loadProject(tx, item.programId, actor)
@@ -1022,6 +1028,11 @@ export async function addExternal(
   return db.transaction(async (tx) => {
     const a = await getActor(userId, tx, true)
     await loadProject(tx, id, a, true)
+    if (
+      input.category !== undefined &&
+      !['material', 'tooling'].includes(String(input.category))
+    )
+      throw new NpiError('VALIDATION_ERROR', '请选择零件或工装明细')
     const type =
       input.trackingType === undefined ? 'purchase' : input.trackingType
     if (
@@ -1038,7 +1049,7 @@ export async function addExternal(
         : uuidValue(input.requestId).toLowerCase()
     const values = {
       programId: id.toLowerCase(),
-      sourceType: 'EXTERNAL' as const,
+      sourceType: input.category === 'tooling' ? 'TOOLING' : 'EXTERNAL',
       trackingType: type,
       name: textValue(input.name, '物料名称'),
       specification: textValue(input.specification, '规格', 1000, true),
@@ -1046,7 +1057,7 @@ export async function addExternal(
       unit: textValue(input.unit, '单位', 30, true),
       ownerId: uuidValue(input.ownerId).toLowerCase(),
       requiredDate: dateValue(input.requiredDate, '要求日期')!,
-      affectsKit: flag(input.affectsKit),
+      affectsKit: true,
       supplier: textValue(input.supplier, '供应商', 255, true),
       remark: textValue(input.remark, '备注', 2000, true),
     }
@@ -1085,7 +1096,7 @@ export async function addExternal(
             and(
               eq(s.npiTrackingItems.id, existing.objectId),
               eq(s.npiTrackingItems.programId, id),
-              eq(s.npiTrackingItems.sourceType, 'EXTERNAL'),
+              inArray(s.npiTrackingItems.sourceType, ['EXTERNAL', 'TOOLING']),
             ),
           )
           .limit(1)
@@ -1152,7 +1163,11 @@ async function editableItem(
         : ['manufacturing', 'technical'].includes(a.role)))
   ))
     return denied()
-  if (!item.trackingEnabled && !item.affectsKit)
+  if (
+    item.sourceType === 'LEGACY_NODE' ||
+    item.sourceType === 'MANUFACTURING' ||
+    (!item.trackingEnabled && !item.affectsKit)
+  )
     throw new NpiError(
       'INVALID_STATE_TRANSITION',
       '已停止跟踪，请联系项目负责人复核',
@@ -1302,7 +1317,11 @@ async function managedTracking(
     .where(eq(s.npiTrackingItems.id, id))
     .for('update')
   if (!item) throw new NpiError('TRACKING_ITEM_NOT_FOUND', '跟踪项不存在', 404)
-  if (!item.trackingEnabled && !item.affectsKit)
+  if (
+    item.sourceType === 'LEGACY_NODE' ||
+    item.sourceType === 'MANUFACTURING' ||
+    (!item.trackingEnabled && !item.affectsKit)
+  )
     throw new NpiError(
       'INVALID_STATE_TRANSITION',
       '已停止跟踪，请先进行换版复核',
@@ -1347,14 +1366,8 @@ export async function adjustTrackingPlan(
         : dateValue(input.requiredDate, '要求日期')!
     const nextOwnerId =
       input.ownerId === undefined ? item.ownerId : uuidValue(input.ownerId)
-    if (
-      item.sourceType === 'MANUFACTURING' &&
-      nextOwnerId !== p.manufacturingOwnerId
-    )
-      throw new NpiError(
-        'VALIDATION_ERROR',
-        '制造四节点须由项目制造负责人统一负责',
-      )
+    if (item.sourceType === 'LEGACY_NODE')
+      throw new NpiError('VALIDATION_ERROR', '旧节点已归档，只能查看历史')
     const nextOwner =
       nextOwnerId === item.ownerId
         ? null
@@ -1593,138 +1606,28 @@ export type QuickReplyItems = Awaited<ReturnType<typeof quickReplyItems>>
 export async function manufacturingPlan(
   userId: string,
   id: string,
-  input: Record<string, unknown>,
+  _input: Record<string, unknown>,
 ) {
-  return db.transaction(async (tx) => {
-    const a = await getActor(userId, tx, true)
-    const p = await loadProject(tx, id, a, true)
-    if (a.role !== 'admin' && !ownsWork(a, p.manufacturingOwnerId))
-      return denied()
-    const [plan] = await tx
-      .select()
-      .from(s.npiManufacturingPlan)
-      .where(eq(s.npiManufacturingPlan.programId, id))
-      .for('update')
-    if (!plan) throw new Error('Missing manufacturing plan')
-    versionCheck(plan.version, input.expectedVersion)
-    const items = await tx
-      .select()
-      .from(s.npiTrackingItems)
-      .where(eq(s.npiTrackingItems.manufacturingPlanId, plan.id))
-    const reasons = (input.changeReasons ?? {}) as Record<string, unknown>
-    let changed = false
-    for (const item of items) {
-      const key = `${item.trackingType}Committed`
-      if (input[key] !== undefined && input[key] !== '') {
-        const next = await writePromise(tx, a, item, {
-          committedDate: input[key],
-          reason: reasons[key],
-          expectedVersion: item.version,
-        })
-        changed ||= next.version !== item.version
-      }
-      const requiredKey = `${item.trackingType}Required`
-      if (input[requiredKey] !== undefined) {
-        const required = dateValue(input[requiredKey], '要求日期')!
-        if (required !== item.requiredDate) {
-          if (item.actualCompleteDate)
-            throw new NpiError(
-              'INVALID_STATE_TRANSITION',
-              '已完成节点不能调整要求日期',
-              400,
-            )
-          const requiredReason = adjustmentReason({
-            reason: reasons[requiredKey],
-          })
-          await tx
-            .update(s.npiTrackingItems)
-            .set({
-              requiredDate: required,
-              version: sql`${s.npiTrackingItems.version} + 1`,
-            })
-            .where(eq(s.npiTrackingItems.id, item.id))
-          await event(tx, a, id, item.id, 'TRACKING_PLAN_ADJUSTED', {
-            reason: requiredReason,
-            actorName: a.name,
-            itemName: item.name,
-            before: { requiredDate: item.requiredDate },
-            after: { requiredDate: required },
-          })
-          changed = true
-        }
-      }
-    }
-    if (changed) {
-      await tx
-        .update(s.npiManufacturingPlan)
-        .set({ version: plan.version + 1, updatedBy: a.id })
-        .where(eq(s.npiManufacturingPlan.id, plan.id))
-      await event(tx, a, id, plan.id, 'MANUFACTURING_PLAN_REPLIED', {
-        version: plan.version + 1,
-      })
-    }
-    return { version: changed ? plan.version + 1 : plan.version }
-  })
+  const actor = await getActor(userId)
+  await loadProject(db, id, actor)
+  throw new NpiError(
+    'NODE_REPLIES_RETIRED',
+    '节点时间回复已取消，请在生产任务中回复具体零部件、工装或整机',
+    409,
+  )
 }
-// A project lock serializes single-node edits, stage changes and this batch.
 export async function completeManufacturing(
   userId: string,
   id: string,
-  input: Record<string, unknown>,
+  _input: Record<string, unknown>,
 ) {
-  return db.transaction(async (tx) => {
-    const a = await getActor(userId, tx, true)
-    const p = await loadProject(tx, id, a, true)
-    if (a.role !== 'admin' && !ownsWork(a, p.manufacturingOwnerId))
-      return denied()
-    const [plan] = await tx
-      .select()
-      .from(s.npiManufacturingPlan)
-      .where(eq(s.npiManufacturingPlan.programId, id))
-      .for('update')
-    if (!plan) throw new Error('Missing manufacturing plan')
-    versionCheck(plan.version, input.expectedVersion)
-    const dates = input.actualDates
-    if (!dates || typeof dates !== 'object' || Array.isArray(dates))
-      throw new NpiError('VALIDATION_ERROR', '请选择需要确认的制造节点日期')
-    const entries = Object.entries(dates)
-    if (
-      !entries.length ||
-      entries.some(([key]) => !Object.hasOwn(nodeNames, key))
-    )
-      throw new NpiError('VALIDATION_ERROR', '制造节点无效或未选择')
-    const items = await tx
-      .select()
-      .from(s.npiTrackingItems)
-      .where(eq(s.npiTrackingItems.manufacturingPlanId, plan.id))
-      .for('update')
-    const completedIds: Array<string> = []
-    for (const [key, date] of entries) {
-      const item = items.find(
-        (i) => i.trackingType === key && i.sourceType === 'MANUFACTURING',
-      )
-      if (!item || !item.trackingEnabled)
-        throw new NpiError('INVALID_STATE_TRANSITION', '制造节点不可确认', 400)
-      const result = await writeCompletion(tx, a, item, p, {
-        actualCompleteDate: date,
-        expectedVersion: item.version,
-      })
-      if (result.version !== item.version) completedIds.push(item.id)
-    }
-    if (completedIds.length) {
-      await tx
-        .update(s.npiManufacturingPlan)
-        .set({ version: plan.version + 1, updatedBy: a.id })
-        .where(eq(s.npiManufacturingPlan.id, plan.id))
-      await event(tx, a, id, plan.id, 'MANUFACTURING_COMPLETED', {
-        completedIds,
-      })
-    }
-    return {
-      version: plan.version + (completedIds.length ? 1 : 0),
-      completedIds,
-    }
-  })
+  const actor = await getActor(userId)
+  await loadProject(db, id, actor)
+  throw new NpiError(
+    'NODE_REPLIES_RETIRED',
+    '节点时间回复已取消，请在生产任务中回复具体零部件、工装或整机',
+    409,
+  )
 }
 export async function changeStage(
   userId: string,
@@ -1755,16 +1658,23 @@ export async function changeStage(
         .select()
         .from(s.npiTrackingItems)
         .where(eq(s.npiTrackingItems.programId, id))
+      const snapshot = await detailFor(tx, p)
+      if (snapshot.bomReviewCount || snapshot.untrackedBomCount)
+        throw new NpiError(
+          'BOM_REVIEW_REQUIRED',
+          '请先完成当前BOM的换版复核，所有零部件均需确认完成',
+          409,
+        )
       if (
         unfinished.some(
           (i) =>
-            (i.affectsKit || i.sourceType === 'MANUFACTURING') &&
+            (i.affectsKit || i.sourceType === 'WHOLE_MACHINE') &&
             !i.actualCompleteDate,
         )
       )
         throw new NpiError(
           'INVALID_STATE_TRANSITION',
-          '制造四节点及影响齐套的项目须先确认完成',
+          '所有零部件、工装及整机须先确认完成',
           400,
         )
       await tx
@@ -1943,6 +1853,14 @@ export async function confirmImport(
         })),
       )
     const active = flag(input.activate)
+    if (active)
+      await carryUnchangedTracking(
+        tx,
+        id,
+        p.activeBomImportId,
+        preview.preview.previewRows,
+        a.id,
+      )
     await tx
       .update(s.npiProjects)
       .set({
@@ -1950,6 +1868,7 @@ export async function confirmImport(
         version: p.version + 1,
       })
       .where(eq(s.npiProjects.programId, id))
+    if (active) await ensureBomDeliveryTasks(tx, id)
     await tx
       .update(s.npiBomPreviews)
       .set({ consumedImportId: record.id, sourceBase64: '' })
@@ -2248,6 +2167,7 @@ export async function reconcileTracking(
       before: item,
       after: result,
     })
+    await ensureBomDeliveryTasks(tx, id)
     return result!
   })
 }
@@ -2275,6 +2195,62 @@ export async function sourceFile(
     throw new NpiError('SOURCE_INTEGRITY_ERROR', '原始文件校验失败', 503)
   return { name: file.sourceName, bytes }
 }
+export async function assignBomTasks(
+  userId: string,
+  id: string,
+  input: Record<string, unknown>,
+) {
+  if (
+    !Array.isArray(input.items) ||
+    !input.items.length ||
+    input.items.length > 200
+  )
+    throw new NpiError('VALIDATION_ERROR', '每次请选择1至200个当前BOM零部件')
+  const selections = input.items.map((value: unknown) => {
+    if (!value || typeof value !== 'object')
+      throw new NpiError('VALIDATION_ERROR', '请选择有效任务')
+    const row = value as Record<string, unknown>
+    return { id: uuidValue(row.id), expectedVersion: row.expectedVersion }
+  })
+  if (new Set(selections.map((v) => v.id)).size !== selections.length)
+    throw new NpiError('VALIDATION_ERROR', '不能重复选择零部件')
+  return db.transaction(async (tx) => {
+    const actor = await getActor(userId, tx, true),
+      project = await loadProject(tx, id, actor, 'plan')
+    const reason = textValue(input.reason, '分配原因', 2000)
+    const results = []
+    for (const selection of selections.sort((a, b) =>
+      a.id.localeCompare(b.id),
+    )) {
+      const [row] = await tx
+        .select()
+        .from(s.npiBomItems)
+        .where(eq(s.npiBomItems.id, selection.id))
+      if (!row || row.importId !== project.activeBomImportId)
+        throw new NpiError(
+          'BOM_VERSION_CONFLICT',
+          '选择中包含其他项目或旧版BOM，请刷新',
+          409,
+        )
+      const [existing] = await tx
+        .select()
+        .from(s.npiTrackingItems)
+        .where(eq(s.npiTrackingItems.bomItemId, row.id))
+      results.push(
+        await setTrackingInTransaction(tx, userId, row.id, {
+          ownerId: input.ownerId,
+          requiredDate:
+            input.requiredDate ||
+            existing?.requiredDate ||
+            project.requiredKitDate,
+          expectedVersion: selection.expectedVersion,
+          reason,
+        }),
+      )
+    }
+    return { count: results.length }
+  })
+}
 export async function setTracking(
   userId: string,
   bomId: string,
@@ -2297,7 +2273,7 @@ async function setTrackingInTransaction(
     .innerJoin(s.npiBomImports, eq(s.npiBomImports.id, s.npiBomItems.importId))
     .where(eq(s.npiBomItems.id, uuidValue(bomId)))
   if (!entry) throw new NpiError('BOM_NOT_FOUND', 'BOM行不存在', 404)
-  const p = await loadProject(tx, entry.programId, a, true)
+  const p = await loadProject(tx, entry.programId, a, 'plan')
   const o = await owner(tx, input.ownerId, [
     'technical',
     'manufacturing',
@@ -2308,11 +2284,20 @@ async function setTrackingInTransaction(
     .from(s.npiTrackingItems)
     .where(eq(s.npiTrackingItems.bomItemId, bomId))
     .for('update')
-  if (!current && p.activeBomImportId !== entry.bom.importId)
-    throw new NpiError('BOM_VERSION_CONFLICT', '仅能从当前BOM新增跟踪项', 409)
+  if (p.activeBomImportId !== entry.bom.importId)
+    throw new NpiError(
+      'BOM_VERSION_CONFLICT',
+      '只能分配当前BOM的零部件任务',
+      409,
+    )
   versionCheck(current?.version ?? 0, input.expectedVersion)
-  const trackingEnabled = flag(input.trackingEnabled),
-    affectsKit = flag(input.affectsKit)
+  if (input.trackingEnabled === false || input.affectsKit === false)
+    throw new NpiError(
+      'VALIDATION_ERROR',
+      '所有当前BOM零部件均需回复，不能取消任务；移除物料请修订BOM',
+    )
+  const trackingEnabled = true,
+    affectsKit = true
   if (current?.actualCompleteDate)
     throw new NpiError(
       'INVALID_STATE_TRANSITION',
@@ -2450,7 +2435,7 @@ export async function reportManufacturingException(
       ownerId: p.manufacturingOwnerId,
       requiredDate: current?.requiredDate || p.requiredKitDate,
       trackingEnabled: true,
-      affectsKit: flag(input.affectsKit),
+      affectsKit: true,
       reason,
     })
     const result = await writePromise(tx, a, tracked, {
@@ -2537,6 +2522,7 @@ export type NpiMetadata = Awaited<ReturnType<typeof metadata>>
 export type NpiDashboard = Awaited<ReturnType<typeof dashboard>>
 export type NpiTracking = Track & {
   status: string
+  currentNpiStage?: string
   ownerName?: string
   motorModel?: string
   projectName?: string

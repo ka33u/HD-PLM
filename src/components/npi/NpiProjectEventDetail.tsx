@@ -149,7 +149,7 @@ function ProjectChangeDetail({
         </p>
       ))}
       <p>
-        调整节点与物料 {change.tracking.length} 项 · 交接问题{' '}
+        调整整机与零部件 {change.tracking.length} 项 · 交接问题{' '}
         {change.issues.length} 项
       </p>
     </div>

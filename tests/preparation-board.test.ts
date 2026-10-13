@@ -8,7 +8,7 @@ import { resolve } from 'node:path'
 import { build } from 'esbuild'
 import { chromium, expect } from '@playwright/test'
 
-test('manufacturing task groups retain local, department and cross-project parts without duplicating nodes', async () => {
+test('production tasks retain local, department and cross-project parts in a single list', async () => {
   const actor = {
     id: 'owner',
     role: 'manufacturing',
@@ -92,8 +92,8 @@ test('manufacturing task groups retain local, department and cross-project parts
         const dashboard = ${JSON.stringify(dashboard)};
         const actor = ${JSON.stringify(actor)};
         createRoot(document.getElementById('app')).render(<div className="npi-app"><main className="npi-main"><div className="npi-content">
-          {mode === 'dashboard' ? <NpiAssignedMaterials actorId={actor.id} revision={dashboard} managedProjectIds={['local']} /> :
-          <NpiPreparationBoard dashboard={dashboard} actor={{...actor, role: mode === 'admin' ? 'admin' : actor.role}} mode={mode === 'purchasing' ? 'purchasing' : 'manufacturing'} onOpen={() => {}} onReply={() => {}} onComplete={() => {}} />}
+          {mode !== 'purchasing' ? <NpiAssignedMaterials actorId={actor.id} revision={dashboard} managedProjectIds={mode === 'dashboard' ? ['local'] : []} /> :
+          <NpiPreparationBoard dashboard={dashboard} actor={{...actor, role: mode === 'admin' ? 'admin' : actor.role}} mode="purchasing" onOpen={() => {}} />}
         </div></main></div>);
       `,
       resolveDir: process.cwd(),
@@ -148,15 +148,7 @@ test('manufacturing task groups retain local, department and cross-project parts
       viewport: { width: 1440, height: 960 },
     })
     await page.goto(root)
-    const groups = page.getByRole('group', { name: '制造任务分类' })
-    const nodeRegion = page.getByRole('region', { name: '制造四节点任务' })
-    await expect(nodeRegion.locator('tbody tr')).toHaveCount(4)
-    await expect(
-      groups.getByRole('button', { name: /部件任务 5/ }),
-    ).toBeVisible()
-    await groups.getByRole('button', { name: /部件任务/ }).click()
-    await expect(nodeRegion).not.toBeVisible()
-    const materials = page.getByRole('region', { name: '我的物料待办' })
+    const materials = page.getByRole('region', { name: '我的生产任务' })
     await expect(materials.locator('tbody tr')).toHaveCount(4)
     for (const name of ['本项目部件', '同部门部件', '跨项目部件'])
       await expect(
@@ -182,10 +174,6 @@ test('manufacturing task groups retain local, department and cross-project parts
     await expect(materials.locator('tbody tr')).toHaveCount(5)
     await materials.getByLabel('搜索我的物料').fill('同部门')
     await expect(materials.locator('tbody tr')).toHaveCount(1)
-    await groups.getByRole('button', { name: /制造节点/ }).click()
-    await expect(nodeRegion.locator('tbody tr')).toHaveCount(4)
-    await groups.getByRole('button', { name: /部件任务/ }).click()
-    await expect(materials.getByLabel('搜索我的物料')).toHaveValue('同部门')
     await materials.getByLabel('搜索我的物料').fill('')
     mkdirSync('runtime/test-evidence', { recursive: true })
     await page.screenshot({
@@ -205,29 +193,20 @@ test('manufacturing task groups retain local, department and cross-project parts
     })
     await page.goto(root + '/?mode=dashboard')
     await expect(
-      page.getByRole('region', { name: '我的物料待办' }).locator('tbody tr'),
+      page.getByRole('region', { name: '我的生产任务' }).locator('tbody tr'),
     ).toHaveCount(1)
     await expect(
-      page.getByRole('region', { name: '我的物料待办' }),
+      page.getByRole('region', { name: '我的生产任务' }),
     ).toContainText('跨项目部件')
     const reads = apiReads
     await page.goto(root + '/?mode=purchasing')
     await expect(
       page.getByRole('region', { name: '采购物料任务' }),
     ).toBeVisible()
-    await expect(groups).toHaveCount(0)
     assert.equal(
       apiReads,
       reads,
       'purchasing must not request production material tasks',
-    )
-    await page.goto(root + '/?mode=admin')
-    await expect(nodeRegion).toBeVisible()
-    await expect(groups).toHaveCount(0)
-    assert.equal(
-      apiReads,
-      reads,
-      'admin must not call personal materials endpoint',
     )
   } finally {
     await browser.close()

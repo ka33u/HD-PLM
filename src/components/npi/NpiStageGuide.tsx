@@ -8,7 +8,7 @@ const guidance = {
   design: {
     title: '确认设计基线，安排协同任务',
     detail:
-      '技术负责人维护项目资料、导入 BOM 并分配需跟踪部件；图纸完成后进入制造准备。',
+      '技术负责人维护项目资料、导入 BOM；零部件默认分给制造负责人，需要采购的批量转交；图纸完成后进入制造准备。',
     role: '技术负责人',
     tab: 'bom',
     action: '打开BOM与任务分配',
@@ -16,7 +16,7 @@ const guidance = {
   manufacturing: {
     title: '收齐制造与采购回复，跟进实际进展',
     detail:
-      '制造负责人回复工艺、工装、齐套、装配四节点；生产与采购按分配任务回复日期，同部门成员可协作办理。',
+      '生产与采购逐项回复零部件、工装及整机的预计完成时间；实际完成后单独确认，同部门成员可协作办理。',
     role: '制造负责人及部件责任人',
     tab: 'manufacturing',
     action: '查看制造任务',
@@ -24,7 +24,7 @@ const guidance = {
   prototype: {
     title: '核对齐套与装配，记录样机结果',
     detail:
-      '逐项核对关键物料的实际完成和装配节点；异常录入项目问题，过程资料上传到项目资料。',
+      '逐项核对所有零部件、工装和整机的实际完成；异常录入项目问题，过程资料上传到项目资料。',
     role: '制造负责人、技术负责人',
     tab: 'kit',
     action: '核对样机齐套',
@@ -32,7 +32,7 @@ const guidance = {
   test: {
     title: '跟进试验问题，核对结项资料',
     detail:
-      '试验记录放入项目资料，问题逐项处理、验证与关闭；核对制造节点和关键物料后确认结项。',
+      '试验记录放入项目资料，问题逐项处理、验证与关闭；全部零部件、工装与整机完成后确认结项。',
     role: '技术负责人及问题责任人',
     tab: 'issues',
     action: '处理项目问题',
@@ -57,10 +57,13 @@ export function NpiStageGuide({
 }) {
   const stage = project.currentNpiStage,
     guide = guidance[stage]
-  const nodes = project.items.filter((i) => i.sourceType === 'MANUFACTURING'),
+  const nodes = project.items.filter((i) => i.sourceType === 'WHOLE_MACHINE'),
     materials = project.items.filter(
       (i) =>
-        i.sourceType !== 'MANUFACTURING' && (i.affectsKit || i.trackingEnabled),
+        !['MANUFACTURING', 'LEGACY_NODE', 'WHOLE_MACHINE'].includes(
+          i.sourceType,
+        ) &&
+        (i.affectsKit || i.trackingEnabled),
     )
   const pending = materials.filter(
     (i) => !i.actualCompleteDate && !i.currentCommittedDate,
@@ -127,10 +130,10 @@ export function NpiStageGuide({
                   ? '已导入'
                   : '尚未导入'}
             </strong>
-            <small>{project.untrackedBomCount} 项未跟踪，需人工确认范围</small>
+            <small>{project.untrackedBomCount} 项待复核分配</small>
           </button>
           <button onClick={() => onTab('manufacturing')}>
-            <span>制造节点</span>
+            <span>整机完成</span>
             <strong>
               {nodes.filter((i) => i.actualCompleteDate).length} /{' '}
               {nodes.length} 已完成
@@ -138,7 +141,7 @@ export function NpiStageGuide({
             <small>承诺与实际分别记录</small>
           </button>
           <button onClick={() => onTab('kit')}>
-            <span>跟踪部件</span>
+            <span>零部件与工装</span>
             <strong>
               {materials.filter((i) => !i.actualCompleteDate).length} 项未完成
             </strong>
@@ -158,7 +161,7 @@ export function NpiStageGuide({
       {stage === 'test' && (
         <p className="npi-stage-note">
           <AlertCircle size={16} />
-          结项后项目只读。请核对未结问题、未跟踪物料及资料完整性；这些提醒不替代业务验收。
+          结项后项目只读。请核对未结问题、待复核任务及资料完整性；这些提醒不替代业务验收。
         </p>
       )}
     </section>

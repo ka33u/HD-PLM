@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { ensureBomDeliveryTasks } from './delivery-tasks'
 import { createHash } from 'node:crypto'
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '../db'
@@ -115,7 +116,7 @@ async function prepare(
   const selected = tracks.filter(
     (t) =>
       t.trackingEnabled &&
-      (t.sourceType === 'EXTERNAL'
+      (['EXTERNAL', 'TOOLING'].includes(t.sourceType)
         ? input.copyExternal
         : t.sourceType === 'ERP_BOM' &&
           input.copyBom &&
@@ -178,7 +179,9 @@ async function prepare(
     counts: {
       bomRows: rows.length,
       bomTracking: selected.filter((t) => t.sourceType === 'ERP_BOM').length,
-      external: selected.filter((t) => t.sourceType === 'EXTERNAL').length,
+      external: selected.filter((t) =>
+        ['EXTERNAL', 'TOOLING'].includes(t.sourceType),
+      ).length,
     },
     assignments,
   }
@@ -308,6 +311,7 @@ export async function inheritProject(
           }),
         )
     }
+    await ensureBomDeliveryTasks(tx, created.id)
     await event(tx, r.actor, created.id, created.id, 'PROJECT_INHERITED', {
       sourceProgramId: sourceId,
       sourceCode: r.program.code,

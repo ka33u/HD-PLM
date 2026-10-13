@@ -117,7 +117,7 @@ async function prepare(
   const trackChanges = tracks.flatMap((track) => {
     let ownerId = track.ownerId,
       requiredDate = track.requiredDate
-    if (track.sourceType === 'MANUFACTURING') {
+    if (track.sourceType === 'WHOLE_MACHINE') {
       ownerId = manufacturing.id
       const previousDate =
         track.trackingType === 'assembly'
@@ -238,7 +238,7 @@ async function prepare(
     retainedDates: tracks
       .filter(
         (t) =>
-          t.sourceType === 'MANUFACTURING' &&
+          t.sourceType === 'WHOLE_MACHINE' &&
           (t.actualCompleteDate ||
             t.requiredDate !==
               (t.trackingType === 'assembly'

@@ -21,7 +21,7 @@ export function NpiKitMaterials({
   onBom: (mode?: 'all' | 'untracked') => void
   renderTable: (items: Array<NpiTracking>) => ReactNode
 }) {
-  const [mode, setMode] = useState('abnormal'),
+  const [mode, setMode] = useState('all'),
     [search, setSearch] = useState(''),
     [source, setSource] = useState('all'),
     [status, setStatus] = useState('all')
@@ -30,19 +30,26 @@ export function NpiKitMaterials({
   const exportPending = useRef(false)
   const materials = project.items.filter(
     (i) =>
-      i.sourceType !== 'MANUFACTURING' && (i.trackingEnabled || i.affectsKit),
+      !['WHOLE_MACHINE', 'MANUFACTURING', 'LEGACY_NODE'].includes(
+        i.sourceType,
+      ) &&
+      (i.trackingEnabled || i.affectsKit),
   )
   const abnormal = (i: NpiTracking) =>
     ['pending_reply', 'risk', 'overdue'].includes(i.status)
   const filtered = focusedItemId
     ? project.items.filter(
-        (i) => i.id === focusedItemId && i.sourceType !== 'MANUFACTURING',
+        (i) =>
+          i.id === focusedItemId &&
+          !['WHOLE_MACHINE', 'MANUFACTURING', 'LEGACY_NODE'].includes(
+            i.sourceType,
+          ),
       )
     : materials.filter(
         (i) =>
           (mode === 'all' ||
             (mode === 'abnormal' && abnormal(i)) ||
-            (mode === 'tracking' && i.trackingEnabled) ||
+            (mode === 'tooling' && i.sourceType === 'TOOLING') ||
             (mode === 'external' && i.sourceType === 'EXTERNAL') ||
             (mode === 'completed' && !!i.actualCompleteDate) ||
             (mode === 'missing' && !i.actualCompleteDate)) &&
@@ -65,8 +72,8 @@ export function NpiKitMaterials({
     setExportError('')
     const modes: Record<string, string> = {
       abnormal: '异常物料',
-      all: '全部跟踪',
-      tracking: '重点跟踪',
+      all: '全部零部件',
+      tooling: '工装明细',
       external: 'BOM外物料',
       completed: '已满足（已完成）',
       missing: '缺料（未完成）',
@@ -74,7 +81,8 @@ export function NpiKitMaterials({
     const sources: Record<string, string> = {
       all: '全部来源',
       ERP_BOM: 'ERP BOM',
-      EXTERNAL: 'BOM外物料',
+      EXTERNAL: 'BOM外零件',
+      TOOLING: '工装明细',
       external_purchase: 'BOM外采购件',
       external_material: '临时样机件',
       external_other: '其他BOM外物料',
@@ -133,27 +141,27 @@ export function NpiKitMaterials({
             action: () => choose('external'),
           },
           {
-            label: '重点跟踪',
-            value: materials.filter((i) => i.trackingEnabled).length,
-            note: '需持续关注',
-            action: () => choose('tracking'),
+            label: '工装明细',
+            value: materials.filter((i) => i.sourceType === 'TOOLING').length,
+            note: '逐项回复与确认',
+            action: () => choose('tooling'),
           },
           {
             label: '已满足',
             value: materials.filter((i) => !!i.actualCompleteDate).length,
-            note: '跟踪物料已完成',
+            note: '零部件及工装已完成',
             action: () => choose('completed'),
           },
           {
             label: '缺料',
             value: materials.filter((i) => !i.actualCompleteDate).length,
-            note: '跟踪物料未完成',
+            note: '零部件及工装未完成',
             action: () => choose('missing'),
           },
           {
-            label: '未跟踪',
+            label: '待复核分配',
             value: project.untrackedBomCount,
-            note: '当前BOM，完成情况未记录',
+            note: '换版后待复核的当前BOM行',
             action: () => onBom('untracked'),
           },
           {
@@ -187,27 +195,27 @@ export function NpiKitMaterials({
           <div>
             <h2>样机齐套物料</h2>
             <p>
-              已满足／缺料按跟踪物料的实际完成记录统计，含BOM外物料；未跟踪的当前BOM物料单列。此处为物料项数，不代表库存或数量缺口。
+              全部BOM零部件、BOM外零件和工装均纳入，按实际完成记录统计；整机单独在交付任务中回复。此处为明细项数，不代表库存数量。
             </p>
           </div>
           {canManage && project.currentNpiStage !== 'completed' && (
             <button
               className="npi-button"
-              aria-label="添加BOM外物料"
+              aria-label="添加零件或工装"
               onClick={onExternal}
             >
-              ＋ BOM外物料
+              ＋ 零件 / 工装
             </button>
           )}
         </div>
         <div className="npi-filters">
           {[
             ['abnormal', '异常物料'],
-            ['tracking', '重点跟踪'],
+            ['tooling', '工装明细'],
             ['external', 'BOM外物料'],
             ['completed', '已满足'],
             ['missing', '缺料'],
-            ['all', '全部跟踪'],
+            ['all', '全部零部件'],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -272,7 +280,8 @@ export function NpiKitMaterials({
             >
               <option value="all">全部</option>
               <option value="ERP_BOM">ERP BOM</option>
-              <option value="EXTERNAL">BOM外物料</option>
+              <option value="EXTERNAL">BOM外零件</option>
+              <option value="TOOLING">工装明细</option>
               <option value="external_purchase">BOM外采购件</option>
               <option value="external_material">临时样机件</option>
               <option value="external_other">其他BOM外物料</option>

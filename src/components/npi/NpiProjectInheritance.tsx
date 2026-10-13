@@ -214,7 +214,7 @@ export function NpiProjectInheritance({
                     checked={copyBom}
                     onChange={(e) => setCopyBom(e.target.checked)}
                   />
-                  当前BOM与重点跟踪配置
+                  当前BOM与任务责任分配
                 </label>
                 <label className="npi-checkbox">
                   <input
@@ -318,7 +318,7 @@ export function NpiProjectInheritance({
                 }
               </p>
               <p>
-                当前BOM {preview.counts.bomRows} 行 · 重点跟踪{' '}
+                当前BOM {preview.counts.bomRows} 行 · 任务分配{' '}
                 {preview.counts.bomTracking} 项 · BOM外物料{' '}
                 {preview.counts.external} 项
               </p>
@@ -417,7 +417,7 @@ export function InheritanceDetail({
   return (
     <p>
       来源：{data.sourceName}（{data.sourceCode}）；继承BOM{' '}
-      {count(data.counts?.bomRows)} 行、重点跟踪{' '}
+      {count(data.counts?.bomRows)} 行、任务分配{' '}
       {count(data.counts?.bomTracking)} 项、BOM外物料{' '}
       {count(data.counts?.external)} 项。承诺与完成记录已重新开始。
     </p>

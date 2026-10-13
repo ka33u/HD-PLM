@@ -128,7 +128,7 @@ export function NpiActivity({
         <div className="npi-panel-title">
           <div>
             <h2>今日变化</h2>
-            <p>{activity.day} · 北京时间 · 物料与制造节点</p>
+            <p>{activity.day} · 北京时间 · 零部件、工装与整机</p>
           </div>
         </div>
         <div className="npi-filters">
@@ -158,7 +158,7 @@ export function NpiActivity({
           <table className="npi-table npi-tracking-table">
             <thead>
               <tr>
-                <th>项目 / 物料或节点</th>
+                <th>项目 / 交付任务</th>
                 <th>变化内容</th>
                 <th>操作</th>
               </tr>
@@ -166,7 +166,7 @@ export function NpiActivity({
             <tbody>
               {activityPage.items.map((r) => (
                 <tr key={r.key}>
-                  <td data-label="项目 / 物料或节点">
+                  <td data-label="项目 / 交付任务">
                     <strong>{r.itemName}</strong>
                     <small>
                       {r.projectName} · {r.projectCode}
@@ -230,7 +230,7 @@ export function NpiActivity({
             <table className="npi-table npi-tracking-table">
               <thead>
                 <tr>
-                  <th>项目 / 物料或节点</th>
+                  <th>项目 / 交付任务</th>
                   <th>责任人</th>
                   <th>首次承诺</th>
                   <th>当前承诺</th>
@@ -241,7 +241,7 @@ export function NpiActivity({
               <tbody>
                 {tasksPage.items.map((i) => (
                   <tr key={i.id}>
-                    <td data-label="项目 / 物料或节点">
+                    <td data-label="项目 / 交付任务">
                       <strong>{i.name}</strong>
                       <small>
                         {i.projectName}

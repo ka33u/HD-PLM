@@ -53,6 +53,23 @@ async function call(
   data?: unknown,
   status = 200,
 ): Promise<any> {
+  if (
+    method === 'PATCH' &&
+    /^\/bom-items\/[^/]+\/tracking$/.test(path) &&
+    status === 200 &&
+    (data as any)?.expectedVersion === 0
+  ) {
+    const { sql } = await import('drizzle-orm')
+    const rows = await db.execute(
+      sql`select version from npi_tracking_items where bom_item_id=${path.split('/')[2]!}`,
+    )
+    if (rows[0])
+      data = {
+        ...(data as object),
+        expectedVersion: rows[0].version,
+        reason: '测试夹具分配已自动生成的任务',
+      }
+  }
   const a = actors[role]!,
     form = data instanceof FormData
   const response = await app.request(root + '/api/v1/npi' + path, {
@@ -350,9 +367,9 @@ try {
     })
   })
 
-  await test('Manufacturing nodes remain independent of BOM review and reply auditing stays transactional', async () => {
+  await test('The whole-machine task remains independent of BOM review and reply auditing stays transactional', async () => {
     for (const node of (await detail()).items.filter(
-      (r: any) => r.sourceType === 'MANUFACTURING',
+      (r: any) => r.sourceType === 'WHOLE_MACHINE',
     )) {
       const promise = await call(
         'manufacturing',
@@ -469,7 +486,7 @@ try {
         expectedVersion: before.version,
         currentNpiStage: 'completed',
       },
-      400,
+      409,
     )
     assert.equal((await detail()).currentNpiStage, 'test')
     const review = await call(
@@ -499,6 +516,19 @@ try {
           actualCompleteDate: '2026-09-01',
         },
         400,
+      )
+    }
+    // Current replacement rows are mandatory tasks even after obsolete tasks are retired.
+    for (const row of (await detail()).items.filter(
+      (i: any) => i.trackingEnabled && !i.actualCompleteDate,
+    )) {
+      await call(
+        row.ownerId === actors.procurement!.id
+          ? 'procurement'
+          : 'manufacturing',
+        `/tracking/${row.id}/complete`,
+        'POST',
+        { expectedVersion: row.version, actualCompleteDate: '2026-09-01' },
       )
     }
     const ready = await detail()

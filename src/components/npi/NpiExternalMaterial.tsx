@@ -32,25 +32,40 @@ export function NpiExternalMaterial({
   onOpenFiles?: (item: NpiTracking) => void
 }) {
   const buyers = meta.users.filter((u) => u.role === 'procurement')
-  const makers = meta.users.filter((u) =>
-    ['manufacturing', 'technical'].includes(u.role || ''),
-  )
+  const makers = meta.users.filter((u) => u.role === 'manufacturing')
   const recent = buyers.some((u) => u.id === meta.recentProcurementOwnerId)
     ? meta.recentProcurementOwnerId || ''
     : ''
+  const [category, setCategory] = useState<'material' | 'tooling'>('material')
   const [type, setType] = useState<'purchase' | 'material' | 'other'>(
-    'purchase',
+    'material',
   )
   const [ownerIds, setOwnerIds] = useState({
     purchase: recent,
-    material: '',
-    other: '',
+    material: project.manufacturingOwnerId,
+    other: project.manufacturingOwnerId,
   })
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('')
   const [saved, setSaved] = useState<CreatedMaterial | null>(null)
   const [uncertain, setUncertain] = useState(false)
+  const [dirty, setDirty] = useState(false),
+    [confirmClose, setConfirmClose] = useState(false)
   const pending = useRef(false)
+  const requestClose = () => {
+    if (pending.current) return
+    if (dirty && !saved) setConfirmClose(true)
+    else onClose()
+  }
+  useEffect(() => {
+    if (!dirty || saved) return
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [dirty, saved])
   const dialog = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (error && dialog.current) dialog.current.scrollTop = 0
@@ -136,10 +151,11 @@ export function NpiExternalMaterial({
         qty: data.get('qty'),
         unit: data.get('unit'),
         trackingType: type,
+        category,
         ownerId: ownerIds[type],
         requiredDate: data.get('requiredDate'),
         supplier: data.get('supplier'),
-        affectsKit: data.has('affectsKit'),
+        affectsKit: true,
         remark: data.get('remark'),
       },
     }
@@ -149,7 +165,7 @@ export function NpiExternalMaterial({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !pending.current) onClose()
+        if (!open) requestClose()
       }}
     >
       <DialogContent
@@ -157,9 +173,9 @@ export function NpiExternalMaterial({
         className="npi-modal npi-external-material-dialog"
         data-saving={busy}
       >
-        <DialogTitle>添加BOM外物料</DialogTitle>
+        <DialogTitle>添加零件 / 工装明细</DialogTitle>
         <DialogDescription>
-          采购件、临时样机件或其他试验用品；保存后进入责任人的待回复清单，可直接补充PDF或图片。
+          逐项添加工装、BOM外零件或试验用品；指定生产或采购责任人后直接回复完成时间，均参与进度与齐套计算。
         </DialogDescription>
         {(saved || error || uncertain) && (
           <div className="npi-external-feedback">
@@ -185,14 +201,41 @@ export function NpiExternalMaterial({
             )}
           </div>
         )}
-        <form onSubmit={submit}>
+        {confirmClose && (
+          <div className="npi-alert" role="alert">
+            <span>明细尚未保存，是否放弃本次填写？</span>
+            <button
+              className="npi-button secondary"
+              onClick={() => setConfirmClose(false)}
+            >
+              继续填写
+            </button>
+            <button className="npi-button secondary" onClick={onClose}>
+              放弃填写并关闭
+            </button>
+          </div>
+        )}
+        <form onSubmit={submit} onChange={() => setDirty(true)}>
           <fieldset
             disabled={busy || !!saved || uncertain}
             style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
           >
             <div className="npi-form-grid">
               <label>
-                <span>物料名称</span>
+                <span>明细类别</span>
+                <select
+                  aria-label="明细类别"
+                  value={category}
+                  onChange={(e) =>
+                    setCategory(e.target.value as 'material' | 'tooling')
+                  }
+                >
+                  <option value="material">BOM外零件</option>
+                  <option value="tooling">工装明细</option>
+                </select>
+              </label>
+              <label>
+                <span>明细名称</span>
                 <input name="name" required maxLength={255} />
               </label>
               <label>
@@ -213,17 +256,17 @@ export function NpiExternalMaterial({
                 <input name="unit" defaultValue="只" maxLength={30} />
               </label>
               <label>
-                <span>物料类型</span>
+                <span>办理方式</span>
                 <select
-                  aria-label="物料类型"
+                  aria-label="办理方式"
                   value={type}
                   onChange={(e) =>
                     setType(e.target.value as 'purchase' | 'material' | 'other')
                   }
                 >
-                  <option value="purchase">BOM外采购件</option>
-                  <option value="material">临时样机件</option>
-                  <option value="other">其他物料</option>
+                  <option value="purchase">采购办理</option>
+                  <option value="material">生产办理</option>
+                  <option value="other">其他生产用品</option>
                 </select>
               </label>
               <label>
@@ -277,12 +320,6 @@ export function NpiExternalMaterial({
                 <span>供应商</span>
                 <input name="supplier" maxLength={255} />
               </label>
-              <label>
-                <span className="npi-checkbox">
-                  <input name="affectsKit" type="checkbox" defaultChecked />
-                  影响齐套
-                </span>
-              </label>
               <label className="wide">
                 <span>备注</span>
                 <textarea name="remark" rows={3} maxLength={2000} />
@@ -294,7 +331,7 @@ export function NpiExternalMaterial({
               type="button"
               className="npi-button secondary"
               disabled={busy}
-              onClick={onClose}
+              onClick={requestClose}
             >
               {saved ? '关闭' : '取消'}
             </button>

@@ -21,9 +21,10 @@ export const moduleInfo = {
     description: '按项目导入ERP BOM、查看完整结构与历史版本。',
   },
   manufacturing: {
-    label: '制造准备',
-    title: '制造准备',
-    description: '跟进工艺、工装、齐套和装配；部件日期可连续填写、批量回复。',
+    label: '生产任务',
+    title: '生产任务',
+    description:
+      '逐项回复零部件、工装及整机的完成时间，支持连续填写和批量回复。',
   },
   purchasing: {
     label: '采购管理',
@@ -38,7 +39,7 @@ export const moduleInfo = {
   data: {
     label: '基础数据',
     title: '基础数据',
-    description: '维护BOM导入模板，查看阶段和制造节点定义。',
+    description: '维护BOM导入模板，查看阶段和任务分配规则。',
   },
   settings: {
     label: '系统设置',

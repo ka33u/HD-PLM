@@ -217,6 +217,19 @@ export async function migrateLegacy({
                 .n !== count
             )
               throw new Error('迁移记录数核对失败：' + table)
+          // Imported legacy rows arrive after schema migrations: upgrade their workflow
+          // in this same transaction, after verifying the copied source counts.
+          const deliveryUpgrade = await readFile(
+            new URL(
+              '../migrations/0003_direct_delivery_tasks.sql',
+              import.meta.url,
+            ),
+            'utf8',
+          )
+          for (const statement of deliveryUpgrade.split(
+            '--> statement-breakpoint',
+          ))
+            if (statement.trim()) await tx.unsafe(statement)
         })
         committed = true
       },
@@ -224,6 +237,7 @@ export async function migrateLegacy({
     return {
       committed,
       counts,
+      deliveryWorkflowUpgraded: true,
       sessionsMigrated: false,
       passwordChangeRequired: true,
     }

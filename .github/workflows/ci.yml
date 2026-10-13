@@ -41,6 +41,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm run test:delivery
       - run: npm run test:http
       - run: npm run test:auth
       - run: npm run test:setup
@@ -48,6 +49,7 @@ jobs:
       - run: npm run test:migration
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
       - run: npm run test:accounts-browser
       - run: npm run test:setup-browser
       - run: npm run test:issue-1

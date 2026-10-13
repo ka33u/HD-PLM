@@ -411,7 +411,7 @@ export function NpiIssues({
                       关联对象
                       <select aria-label="关联对象" name="related">
                         <option value="">整个项目</option>
-                        <optgroup label="制造节点 / 重点物料 / BOM外物料">
+                        <optgroup label="整机 / 零部件 / 工装">
                           {project?.items.map((i) => (
                             <option value={`track:${i.id}`} key={i.id}>
                               {i.name}

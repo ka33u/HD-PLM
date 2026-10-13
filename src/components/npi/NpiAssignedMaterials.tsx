@@ -40,7 +40,8 @@ export function NpiAssignedMaterials({
     [loadError, setLoadError] = useState('')
   const [notice, setNotice] = useState(''),
     [search, setSearch] = useState(''),
-    [filter, setFilter] = useState('unfinished')
+    [filter, setFilter] = useState('unfinished'),
+    [kind, setKind] = useState('all')
   const [editing, setEditing] = useState<{
     item: Item
     complete: boolean
@@ -114,6 +115,7 @@ export function NpiAssignedMaterials({
       scopedItems
         .filter(
           (item) =>
+            (kind === 'all' || item.sourceType === kind) &&
             (filter === 'all' ||
               (filter === 'unfinished'
                 ? !item.actualCompleteDate &&
@@ -145,7 +147,7 @@ export function NpiAssignedMaterials({
             a.id.localeCompare(b.id)
           )
         }),
-    [scopedItems, filter, search],
+    [scopedItems, filter, search, kind],
   )
   const page = usePagination(rows, 20, start)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -189,13 +191,13 @@ export function NpiAssignedMaterials({
   )
     return null
   return (
-    <section ref={start} className="npi-panel" aria-label="我的物料待办">
+    <section ref={start} className="npi-panel" aria-label="我的生产任务">
       <div className="npi-panel-title">
         <div>
-          <h2>{scope === 'all' ? '我的部件任务' : '我的协作物料'}</h2>
+          <h2>{scope === 'all' ? '我的生产任务' : '我的协作物料'}</h2>
           <p>
             {scope === 'all'
-              ? '本人及同岗位部门成员负责的全部部件，覆盖本项目和跨项目协作；制造四节点在“制造节点”中处理。'
+              ? '本人及同岗位部门成员负责的全部部件，覆盖本项目和跨项目协作；整机、工装与零部件统一处理。'
               : '其他项目分给本人及同岗位部门成员的BOM物料、临时样机件和其他物料，可直接回复与确认完成。'}
           </p>
         </div>
@@ -218,6 +220,23 @@ export function NpiAssignedMaterials({
         </p>
       )}
       <div className="npi-material-filters">
+        <select
+          aria-label="生产任务类别"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+        >
+          {[
+            ['all', '全部任务'],
+            ['WHOLE_MACHINE', '整机'],
+            ['ERP_BOM', 'BOM零部件'],
+            ['TOOLING', '工装明细'],
+            ['EXTERNAL', 'BOM外零件'],
+          ].map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
         <input
           aria-label="搜索我的物料"
           type="search"
@@ -246,7 +265,7 @@ export function NpiAssignedMaterials({
         <p className="npi-module-empty">
           {scopedItems.length
             ? '没有符合条件的部件，请调整搜索或状态；已完成记录可切换“已完成”查看。'
-            : '暂无已分配的部件任务。项目负责人在BOM中指定回复责任人后，任务会出现在这里。'}
+            : '暂无已分配的部件任务。导入BOM后零部件默认分给制造负责人，手动添加的工装也会出现在这里。'}
         </p>
       )}
       <NpiPagination
@@ -273,11 +292,15 @@ export function NpiAssignedMaterials({
                   <td data-label="物料 / 项目">
                     <strong>{item.name}</strong>
                     <div className="npi-muted">
-                      {item.sourceType === 'ERP_BOM'
-                        ? 'BOM物料'
-                        : item.trackingType === 'other'
-                          ? '其他物料'
-                          : '临时样机件'}{' '}
+                      {item.sourceType === 'WHOLE_MACHINE'
+                        ? '整机'
+                        : item.sourceType === 'TOOLING'
+                          ? '工装明细'
+                          : item.sourceType === 'ERP_BOM'
+                            ? 'BOM零部件'
+                            : item.trackingType === 'other'
+                              ? '其他物料'
+                              : '临时样机件'}{' '}
                       · {item.qty} {item.unit}
                     </div>
                     <div>{item.bomReference?.materialCode}</div>

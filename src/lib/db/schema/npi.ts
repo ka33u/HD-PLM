@@ -9,9 +9,11 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { projects } from './projects'
 import { users } from './users'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
@@ -172,7 +174,7 @@ export const npiTrackingItems = pgTable(
     ),
     sourceType: text('source_type').notNull(),
     trackingType: text('tracking_type').notNull(),
-    name: varchar('name', { length: 255 }).notNull(),
+    name: text('name').notNull(),
     specification: text('specification').notNull().default(''),
     qty: text('qty').notNull().default('1'),
     unit: text('unit').notNull().default(''),
@@ -193,6 +195,9 @@ export const npiTrackingItems = pgTable(
   (t) => [
     unique('npi_tracking_bom_unique').on(t.bomItemId),
     unique('npi_node_unique').on(t.manufacturingPlanId, t.trackingType),
+    uniqueIndex('npi_whole_machine_project')
+      .on(t.programId)
+      .where(sql`${t.sourceType} = 'WHOLE_MACHINE'`),
     index('npi_owner_project').on(t.ownerId, t.programId),
   ],
 )

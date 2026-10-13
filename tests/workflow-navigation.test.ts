@@ -67,6 +67,23 @@ async function call(
   data?: unknown,
   status = 200,
 ): Promise<any> {
+  if (
+    method === 'PATCH' &&
+    /^\/bom-items\/[^/]+\/tracking$/.test(path) &&
+    status === 200 &&
+    (data as any)?.expectedVersion === 0
+  ) {
+    const { sql } = await import('drizzle-orm')
+    const rows = await db.execute(
+      sql`select version from npi_tracking_items where bom_item_id=${path.split('/')[2]!}`,
+    )
+    if (rows[0])
+      data = {
+        ...(data as object),
+        expectedVersion: rows[0].version,
+        reason: '测试夹具分配已自动生成的任务',
+      }
+  }
   const actor = actors[role]!,
     form = data instanceof FormData
   const response = await app.request(root + '/api/v1/npi' + path, {
@@ -130,7 +147,7 @@ async function seedWorkflow() {
       '+',
       (i + 1) * 10,
       'FLOW-PART-' + i,
-      ['待生产机壳', '待采购轴承', '无需重点跟踪垫片'][i],
+      ['待生产机壳', '待采购轴承', '标准垫片'][i],
       '规格' + i,
       1,
       '只',
@@ -289,35 +306,38 @@ try {
     ) {
       await page.goto(`${root}/npi?view=${role}`)
       await page
-        .getByRole('button', { name: '部件快速回复', exact: true })
+        .getByRole('button', { name: '完成时间快速回复', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('快速回复项目').selectOption(projectId)
       const dates = dialog.locator('tbody input[type=date]')
-      await expect(dates).toHaveCount(1)
-      await dates.first().fill('2026-11-10')
+      const count = role === 'manufacturing' ? 3 : 1
+      await expect(dates).toHaveCount(count)
+      for (let i = 0; i < count; i++) await dates.nth(i).fill('2026-11-10')
       await dialog
-        .getByRole('button', { name: '提交 1 项回复', exact: true })
+        .getByRole('button', { name: `提交 ${count} 项回复`, exact: true })
         .click()
       await expect(
         dialog.locator('.npi-message[role=status]').first(),
-      ).toContainText('已回复 1 个部件')
+      ).toContainText(`已回复 ${count} 个部件`)
       await dialog
         .getByRole('button', {
           name: role === 'procurement' ? '实际到货' : '实际完成',
           exact: true,
         })
         .click()
-      await expect(dates).toHaveCount(1)
-      await dates.first().fill('2026-09-01')
+      await expect(dates).toHaveCount(count)
+      for (let i = 0; i < count; i++) await dates.nth(i).fill('2026-09-01')
       await dialog
-        .getByRole('button', { name: '确认 1 项已实际完成', exact: true })
+        .getByRole('button', {
+          name: `确认 ${count} 项已实际完成`,
+          exact: true,
+        })
         .click()
       await expect(
         dialog.locator('.npi-message[role=status]').first(),
-      ).toContainText('已确认实际完成 1 个部件')
-      await dialog
-        .getByRole('button', { name: '关闭弹窗', exact: true })
-        .click()
+      ).toContainText(`已确认实际完成 ${count} 个部件`)
+      await dialog.getByRole('button', { name: '关闭', exact: true }).click()
       await expect(dialog).toHaveCount(0)
     }
     try {
@@ -470,15 +490,14 @@ try {
       )
       await tech.getByLabel('BOM版本', { exact: true }).selectOption(oldBomId)
       await tech.getByRole('tab', { name: '样机齐套', exact: true }).click()
-      await tech.getByRole('button', { name: /^未跟踪/ }).click()
-      await expectTab(tech, 'bom', 'ERP BOM')
-      await expect(tech.getByLabel('BOM版本', { exact: true })).toHaveValue(
-        activeBomId,
-      )
+      await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
+      await tech
+        .getByLabel('BOM版本', { exact: true })
+        .selectOption(activeBomId)
       const untracked = tech
         .getByRole('table', { name: '完整BOM明细' })
         .getByRole('row')
-        .filter({ hasText: '无需重点跟踪垫片' })
+        .filter({ hasText: '标准垫片' })
       await untracked
         .getByRole('button', { name: '修订物料', exact: true })
         .click()
@@ -532,47 +551,7 @@ try {
         'manufacturing',
         projectUrl('manufacturing', 'manufacturing'),
       )
-      await expectTab(mfg, 'manufacturing', '制造准备')
-      await mfg.getByRole('tab', { name: '样机齐套', exact: true }).click()
-      await expectTab(mfg, 'kit', '样机齐套')
-      await expect(
-        mfg.getByRole('region', { name: '制造部集中回复', exact: true }),
-      ).toHaveCount(0)
-      await expect(
-        mfg.getByLabel('工艺准备承诺日期', { exact: true }),
-      ).toHaveCount(0)
-      await mfg.getByRole('button', { name: '集中回复', exact: true }).click()
-      const reply = mfg.getByRole('dialog')
-      await expect(
-        reply.getByRole('heading', { name: '集中回复制造四节点' }),
-      ).toBeVisible()
-      await reply
-        .getByLabel('工艺准备承诺日期', { exact: true })
-        .fill('2026-11-10')
-      await mfg.goBack()
-      await expectTab(mfg, 'kit', '样机齐套')
-      await expect(reply).toBeVisible()
-      await expect(
-        reply.getByLabel('工艺准备承诺日期', { exact: true }),
-      ).toHaveValue('2026-11-10')
-      await expect(mfg.getByText(/先保存或关闭/).first()).toBeVisible()
-      for (const node of ['工装准备', '零部件齐套', '样机装配'])
-        await reply
-          .getByLabel(node + '承诺日期', { exact: true })
-          .fill('2026-11-10')
-      await reply
-        .getByRole('button', { name: '保存制造回复', exact: true })
-        .click()
-      await expect(reply).toHaveCount(0)
-      assert.equal(
-        (await detail()).items.filter(
-          (r: any) =>
-            r.sourceType === 'MANUFACTURING' &&
-            r.currentCommittedDate === '2026-11-10',
-        ).length,
-        4,
-      )
-
+      await expectTab(mfg, 'manufacturing', '交付任务')
       await replyAndCompletePart(buyer, 'procurement')
       await replyAndCompletePart(mfg, 'manufacturing')
       await tech.reload()
@@ -582,19 +561,6 @@ try {
         fullPage: true,
       })
       await advance(tech, 'prototype', '样机制作')
-      await mfg.goto(projectUrl('kit', 'manufacturing'))
-      await mfg
-        .getByRole('button', { name: '集中确认完成', exact: true })
-        .click()
-      const completion = mfg.getByRole('dialog')
-      for (const node of ['工艺准备', '工装准备', '零部件齐套', '样机装配'])
-        await completion
-          .getByLabel(node + '实际完成日期', { exact: true })
-          .fill('2026-09-01')
-      await completion
-        .getByRole('button', { name: '保存完成记录', exact: true })
-        .click()
-      await expect(completion).toHaveCount(0)
       await tech.reload()
       await tech.setViewportSize({ width: 390, height: 844 })
       await expect(guide(tech)).toBeVisible()
@@ -630,14 +596,14 @@ try {
       assert.equal(final.currentNpiStage, 'completed')
       assert.equal(
         final.untrackedBomCount,
-        1,
-        'untracked material is reported separately, without inventing a new stage gate',
+        0,
+        'every current BOM row must have a delivery task',
       )
       assert.equal(
         final.items.filter(
           (r: any) => r.sourceType === 'ERP_BOM' && r.actualCompleteDate,
         ).length,
-        2,
+        3,
       )
       assert.equal(
         final.events.filter((e: any) => e.action === 'STAGE_CHANGED').length,

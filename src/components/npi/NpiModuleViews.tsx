@@ -215,434 +215,172 @@ export function NpiProjectLibrary({
 export function NpiPreparationBoard({
   dashboard,
   actor,
-  mode,
   onOpen,
-  onReply,
-  onComplete,
   users = [],
 }: {
   dashboard: NpiDashboard
   actor: NpiMetadata['actor']
-  mode: 'manufacturing' | 'purchasing'
+  mode: 'purchasing'
   onOpen: Open
-  onReply: (id: string) => void
-  onComplete: (id: string) => void
   users?: NpiMetadata['users']
 }) {
-  const [taskGroup, setTaskGroup] = useState<'nodes' | 'materials'>('nodes')
-  const [materialCount, setMaterialCount] = useState<number | null>(null)
-  const hasPersonalMaterials =
-    mode === 'manufacturing' &&
-    ['technical', 'manufacturing'].includes(actor.role)
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState('unfinished'),
-    [kind, setKind] = useState('all'),
     [purchaseOwner, setPurchaseOwner] = useState('all'),
-    [arrival, setArrival] = useState<ArrivalWindow>('all'),
-    [mine, setMine] = useState(
-      mode === 'manufacturing' &&
-        actor.role === 'manufacturing' &&
-        !actor.departmentId,
-    )
+    [arrival, setArrival] = useState<ArrivalWindow>('all')
   const start = useRef<HTMLDivElement>(null)
-  const all = useMemo(
-    () =>
-      dashboard.projects.flatMap((p) =>
-        p.items
-          .filter((i) =>
-            mode === 'manufacturing'
-              ? i.sourceType === 'MANUFACTURING'
-              : i.trackingType === 'purchase' &&
-                (i.trackingEnabled || i.affectsKit),
-          )
-          .map((item) => ({ project: p, item })),
-      ),
-    [dashboard, mode],
+  const all = dashboard.projects.flatMap((project) =>
+    project.items
+      .filter(
+        (i) =>
+          i.trackingType === 'purchase' && (i.trackingEnabled || i.affectsKit),
+      )
+      .map((item) => ({ project, item })),
   )
-  const purchaseOwners = useMemo(() => {
-    if (mode !== 'purchasing') return []
-    const people = new Map(users.map((user) => [user.id, user]))
-    return [
-      ...new Map(
-        all.map(({ item }) => {
-          const person = people.get(item.ownerId)
-          return [
-            item.ownerId,
-            {
-              id: item.ownerId,
-              label: `${item.ownerName || person?.name || '未命名用户'}${person?.email ? ` · ${person.email}` : ''}`,
-            },
-          ]
-        }),
-      ).values(),
-    ].sort(
-      (a, b) =>
-        a.label.localeCompare(b.label, 'zh-CN') || a.id.localeCompare(b.id),
+  const owners = [
+    ...new Map(
+      all.map(({ item }) => [
+        item.ownerId,
+        { id: item.ownerId, name: item.ownerName },
+      ]),
+    ).values(),
+  ]
+  const filtered = all
+    .filter(
+      ({ project: p, item: i }) =>
+        contains(
+          query,
+          p.name,
+          p.code,
+          p.motorModel,
+          i.name,
+          i.ownerName,
+          i.bomReference?.materialCode,
+        ) &&
+        (purchaseOwner === 'all' || purchaseOwner === i.ownerId) &&
+        matchesArrivalWindow(i, dashboard.todayActivity.day, arrival) &&
+        (status === 'all' ||
+          (status === 'unfinished'
+            ? !i.actualCompleteDate && p.currentNpiStage !== 'completed'
+            : i.status === status)),
     )
-  }, [all, users, mode])
-  const scoped = useMemo(
-    () =>
-      all.filter(
-        ({ project: p, item: i }) =>
-          contains(
-            query,
-            p.name,
-            p.code,
-            p.motorModel,
-            i.name,
-            i.ownerName,
-            i.bomReference?.materialCode,
-          ) &&
-          (!mine || i.ownerId === actor.id) &&
-          (kind === 'all' || i.trackingType === kind) &&
-          (mode !== 'purchasing' ||
-            ((purchaseOwner === 'all' || i.ownerId === purchaseOwner) &&
-              matchesArrivalWindow(i, dashboard.todayActivity.day, arrival))),
-      ),
-    [
-      all,
-      query,
-      mine,
-      kind,
-      actor.id,
-      mode,
-      purchaseOwner,
-      arrival,
-      dashboard.todayActivity.day,
-    ],
-  )
-  const rows = useMemo(
-    () =>
-      scoped
-        .filter(
-          ({ project: p, item: i }) =>
-            status === 'all' ||
-            (status === 'unfinished'
-              ? !i.actualCompleteDate && p.currentNpiStage !== 'completed'
-              : i.status === status),
-        )
-        .sort(
-          (a, b) =>
-            (mode === 'purchasing' && arrival !== 'all'
-              ? compareExpectedArrival(a.item, b.item)
-              : 0) ||
-            (byRisk[a.item.status] ?? 5) - (byRisk[b.item.status] ?? 5) ||
-            a.item.requiredDate.localeCompare(b.item.requiredDate) ||
-            a.project.code.localeCompare(b.project.code),
-        ),
-    [scoped, status, mode, arrival],
-  )
-  const pagination = usePagination(rows, 25, start)
+    .sort((a, b) => compareExpectedArrival(a.item, b.item))
+  const page = usePagination(filtered, 50, start)
   return (
-    <>
-      {hasPersonalMaterials && (
-        <>
-          <div
-            className="npi-preparation-switch"
-            role="group"
-            aria-label="制造任务分类"
-          >
-            <button
-              type="button"
-              aria-pressed={taskGroup === 'nodes'}
-              onClick={() => setTaskGroup('nodes')}
-            >
-              <span>制造节点</span>
-              <small>工艺、工装、齐套与装配</small>
-            </button>
-            <button
-              type="button"
-              aria-pressed={taskGroup === 'materials'}
-              onClick={() => setTaskGroup('materials')}
-            >
-              <span>
-                部件任务{' '}
-                {materialCount !== null && <strong>{materialCount}</strong>}
-              </span>
-              <small>本人及同部门负责的BOM与临时物料</small>
-            </button>
-          </div>
-          <div hidden={taskGroup !== 'materials'}>
-            <NpiAssignedMaterials
-              actorId={actor.id}
-              revision={dashboard}
-              managedProjectIds={dashboard.projects.map((p) => p.id)}
-              scope="all"
-              onCount={setMaterialCount}
-            />
-          </div>
-        </>
-      )}
-      <section
-        hidden={hasPersonalMaterials && taskGroup !== 'nodes'}
-        className="npi-panel"
-        aria-label={
-          mode === 'manufacturing' ? '制造四节点任务' : '采购物料任务'
-        }
-      >
-        <div className="npi-panel-title">
-          <div>
-            <h2>
-              {mode === 'manufacturing' ? '制造四节点任务' : '采购物料任务'}
-            </h2>
-            <p>
-              {mode === 'manufacturing'
-                ? '直接回复四节点日期或确认完成，进入项目可追溯完整历史。'
-                : '按责任人跟进采购交期，进入物料可查看承诺及到货资料。'}
-            </p>
-          </div>
-          <span>共 {rows.length} 项</span>
+    <section className="npi-panel" aria-label="采购物料任务">
+      <div className="npi-panel-title">
+        <div>
+          <h2>采购物料任务</h2>
+          <p>
+            采购零部件与外购工装的完成时间和到货进展。进入项目查看明细和历史。
+          </p>
         </div>
-        <div className="npi-module-counts">
-          {Object.entries(stateLabels).map(([value, label]) => (
-            <button
-              type="button"
-              key={value}
-              aria-pressed={status === value}
-              onClick={() => setStatus(value)}
-            >
-              {label}{' '}
-              <strong>
-                {scoped.filter((r) => r.item.status === value).length}
-              </strong>
-            </button>
+      </div>
+      <div className="npi-material-filters">
+        <input
+          type="search"
+          aria-label="搜索业务任务"
+          placeholder="项目 / 零部件 / 责任人"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <select
+          aria-label="业务任务状态"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          {[
+            ['unfinished', '未完成'],
+            ['pending_reply', '待回复'],
+            ['risk', '风险'],
+            ['overdue', '逾期'],
+            ['completed', '已完成'],
+            ['all', '全部'],
+          ].map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
           ))}
-        </div>
-        {mode === 'purchasing' && (
-          <div className="npi-purchase-guide">
-            <p>
-              采购待办来自已分配给采购负责人的BOM物料或BOM外采购件。供应类型、领料部门不会自动分配责任人。
-            </p>
-            {dashboard.projects
-              .filter(
-                (p) =>
-                  p.activeBomImportId &&
-                  p.currentNpiStage !== 'completed' &&
-                  !p.items.some(
-                    (i) =>
-                      i.trackingType === 'purchase' &&
-                      (i.trackingEnabled || i.affectsKit),
-                  ),
-              )
-              .map((p) => (
-                <div key={p.id}>
-                  <span>{projectTitle(p)} · 尚未分配采购任务</span>{' '}
+        </select>
+        <select
+          aria-label="采购责任人"
+          value={purchaseOwner}
+          onChange={(e) => setPurchaseOwner(e.target.value)}
+        >
+          <option value="all">全部采购责任人</option>
+          {owners.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="采购到货范围"
+          value={arrival}
+          onChange={(e) => setArrival(e.target.value as ArrivalWindow)}
+        >
+          <option value="all">不限到货日期</option>
+          <option value="today">今日到货</option>
+          <option value="7">未来7天到货</option>
+          <option value="14">未来14天到货</option>
+        </select>
+      </div>
+      {arrival !== 'all' && (
+        <p className="npi-list-summary">
+          {arrivalWindowDescription(dashboard.todayActivity.day, arrival)}
+        </p>
+      )}
+      <div className="npi-table-scroll" ref={start}>
+        <table className="npi-table npi-tracking-table">
+          <thead>
+            <tr>
+              <th>项目 / 任务</th>
+              <th>责任人</th>
+              <th>要求日期</th>
+              <th>首次承诺</th>
+              <th>当前承诺</th>
+              <th>实际完成</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.items.map(({ project: p, item: i }) => (
+              <tr key={i.id} data-npi-task={i.id}>
+                <td data-label="项目 / 任务">
+                  <strong>{projectTitle(p)}</strong>
+                  <span>{i.name}</span>
+                  <small>
+                    {i.bomReference?.materialCode ||
+                      (i.sourceType === 'TOOLING' ? '工装' : 'BOM外零件')}
+                  </small>
+                </td>
+                <td data-label="责任人">{i.ownerName}</td>
+                <td data-label="要求日期">{i.requiredDate}</td>
+                <td data-label="首次承诺">{i.firstCommittedDate || '—'}</td>
+                <td data-label="当前承诺">
+                  {i.currentCommittedDate || '待回复'}
+                </td>
+                <td data-label="实际完成">{i.actualCompleteDate || '—'}</td>
+                <td data-label="状态">{badge(i.status)}</td>
+                <td data-label="操作">
                   <button
                     className="npi-project-link"
-                    onClick={() => onOpen(p.id, 'bom')}
+                    onClick={() => onOpen(p.id, 'kit', i.id)}
                   >
-                    进入BOM分配采购 ↗
+                    查看采购物料 ↗
                   </button>
-                </div>
-              ))}
-          </div>
-        )}
-        <div className="npi-module-filters">
-          <label>
-            查找任务
-            <input
-              type="search"
-              aria-label="业务任务搜索"
-              value={query}
-              maxLength={200}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="项目 / 物料 / 负责人"
-            />
-          </label>
-          <label>
-            任务状态
-            <select
-              aria-label="业务任务状态"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="unfinished">未完成</option>
-              <option value="all">全部记录</option>
-              {Object.entries(stateLabels).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
-          {mode === 'manufacturing' && (
-            <label>
-              制造节点
-              <select
-                aria-label="制造节点筛选"
-                value={kind}
-                onChange={(e) => setKind(e.target.value)}
-              >
-                <option value="all">四个节点</option>
-                {Object.entries(nodeNames).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {mode === 'purchasing' && (
-            <>
-              <label className="npi-purchase-owner-filter">
-                采购责任人
-                <select
-                  aria-label="采购责任人筛选"
-                  value={purchaseOwner}
-                  onChange={(e) => setPurchaseOwner(e.target.value)}
-                  className="npi-purchase-owner-select"
-                >
-                  <option value="all">全部采购责任人</option>
-                  {purchaseOwners.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                承诺到货范围
-                <select
-                  aria-label="采购到货范围"
-                  value={arrival}
-                  onChange={(e) => setArrival(e.target.value as ArrivalWindow)}
-                >
-                  <option value="all">不限到货日期</option>
-                  <option value="today">今日到货</option>
-                  <option value="7">未来7天到货</option>
-                  <option value="14">未来14天到货</option>
-                </select>
-              </label>
-              {(purchaseOwner !== 'all' || arrival !== 'all') && (
-                <button
-                  className="npi-button secondary"
-                  onClick={() => {
-                    setPurchaseOwner('all')
-                    setArrival('all')
-                  }}
-                >
-                  清除采购条件
-                </button>
-              )}
-            </>
-          )}
-          <label className="npi-module-checkbox">
-            <input
-              type="checkbox"
-              checked={mine}
-              onChange={(e) => setMine(e.target.checked)}
-            />
-            仅本人负责
-          </label>
-        </div>
-        {mode === 'purchasing' && arrival !== 'all' && (
-          <p className="npi-list-summary">
-            {arrivalWindowDescription(dashboard.todayActivity.day, arrival)}
-          </p>
-        )}
-        <div ref={start} className="npi-table-scroll">
-          <table className="npi-table npi-tracking-table">
-            <thead>
-              <tr>
-                <th>项目 / 任务</th>
-                <th>负责人</th>
-                <th>要求日期</th>
-                <th>首次承诺</th>
-                <th>当前承诺</th>
-                <th>实际完成</th>
-                <th>状态</th>
-                <th>操作</th>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {pagination.items.map(({ project: p, item: i }) => (
-                <tr key={i.id} data-npi-task={i.id}>
-                  <td data-label="项目 / 任务">
-                    <strong>{projectTitle(p)}</strong>
-                    <span className="npi-task-name">{i.name}</span>
-                    <small>项目编号：{p.code}</small>
-                    {mode === 'purchasing' && (
-                      <small>
-                        {i.sourceType === 'ERP_BOM' ? 'ERP BOM' : 'BOM外采购件'}
-                      </small>
-                    )}
-                  </td>
-                  <td data-label="负责人">{i.ownerName}</td>
-                  <td data-label="要求日期">{i.requiredDate}</td>
-                  <td data-label="首次承诺">{i.firstCommittedDate || '—'}</td>
-                  <td data-label="当前承诺">
-                    {i.currentCommittedDate || '待回复'}
-                    <small>改期 {i.changeCount} 次</small>
-                  </td>
-                  <td data-label="实际完成">{i.actualCompleteDate || '—'}</td>
-                  <td data-label="状态">{badge(i.status)}</td>
-                  <td data-label="操作">
-                    <div className="npi-row-actions">
-                      <button
-                        className="npi-project-link"
-                        onClick={() => {
-                          if (
-                            mode === 'manufacturing' &&
-                            p.currentNpiStage !== 'completed' &&
-                            (actor.role === 'admin' ||
-                              (['technical', 'manufacturing'].includes(
-                                actor.role,
-                              ) &&
-                                ownsWork(actor, p.manufacturingOwnerId)))
-                          )
-                            onReply(p.id)
-                          else
-                            onOpen(
-                              p.id,
-                              mode === 'manufacturing'
-                                ? 'manufacturing'
-                                : 'kit',
-                              mode === 'purchasing' ? i.id : undefined,
-                            )
-                        }}
-                      >
-                        {mode === 'manufacturing'
-                          ? p.currentNpiStage !== 'completed' &&
-                            (actor.role === 'admin' ||
-                              (['technical', 'manufacturing'].includes(
-                                actor.role,
-                              ) &&
-                                ownsWork(actor, p.manufacturingOwnerId)))
-                            ? '集中回复'
-                            : '查看制造准备'
-                          : '查看采购物料'}{' '}
-                        ↗
-                      </button>
-                      {mode === 'manufacturing' &&
-                        !i.actualCompleteDate &&
-                        p.currentNpiStage !== 'completed' &&
-                        (actor.role === 'admin' ||
-                          (['technical', 'manufacturing'].includes(
-                            actor.role,
-                          ) &&
-                            ownsWork(actor, p.manufacturingOwnerId))) && (
-                          <button
-                            className="npi-project-link"
-                            onClick={() => onComplete(p.id)}
-                          >
-                            确认完成
-                          </button>
-                        )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!rows.length && (
-            <p className="npi-module-empty">
-              没有匹配的任务，请调整搜索、状态或负责人范围。
-            </p>
-          )}
-        </div>
-        <NpiPagination label="业务任务分页" {...pagination} />
-      </section>
-    </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!page.items.length && (
+        <p className="npi-module-empty">暂无符合条件的采购任务。</p>
+      )}
+      <NpiPagination {...page} label="业务任务分页" />
+    </section>
   )
 }
 

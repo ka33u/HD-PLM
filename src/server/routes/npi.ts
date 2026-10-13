@@ -472,6 +472,15 @@ app.get('/projects/:id/bom/:importId/source', async (c) => {
     },
   })
 })
+app.post('/projects/:id/bom/assign', async (c) =>
+  c.json(
+    await npi.assignBomTasks(
+      c.get('userId'),
+      c.req.param('id'),
+      await c.req.json(),
+    ),
+  ),
+)
 app.patch('/bom-items/:id/tracking', async (c) =>
   c.json(
     await npi.setTracking(

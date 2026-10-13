@@ -116,7 +116,7 @@ try {
     assert.equal(rows[0].deletedByName, '张工')
     assert.equal(rows[0].technicalOwnerName, '张工')
     const detail = await call('technical', `/project-trash/${batch[0]!.id}`)
-    assert.equal(detail.counts.trackingItems, 4)
+    assert.equal(detail.counts.trackingItems, 1)
     assert.deepEqual(
       [
         detail.counts.bomVersions,

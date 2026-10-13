@@ -381,7 +381,7 @@ export function NpiQuickReply({
           </div>
           <div>
             <DialogTitle>
-              {kind === 'procurement' ? '采购' : '生产'}部件快速回复
+              {kind === 'procurement' ? '采购' : '生产'}完成时间快速回复
             </DialogTitle>
             <DialogDescription>
               直接填日期，Enter
@@ -824,7 +824,7 @@ export function NpiQuickReply({
                   <p>
                     {rows.length
                       ? '可切换“全部未完成”或清空筛选。'
-                      : '已分配给你或同部门成员的部件会出现在这里。未跟踪物料请先由项目负责人分配。'}
+                      : '已分配给你或同部门成员的部件会出现在这里。BOM物料默认分给制造负责人；换版后请先完成复核。'}
                   </p>
                   <button
                     className="npi-button secondary"
