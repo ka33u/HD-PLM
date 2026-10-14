@@ -809,6 +809,7 @@ try {
           await page
             .getByRole('button', { name: '进入BOM ↗', exact: true })
             .click()
+          await page.locator('.npi-bom-name-link').first().click()
           await page
             .getByRole('button', { name: '修订物料', exact: true })
             .click()
@@ -858,6 +859,7 @@ try {
             .getByRole('button', { name: '保存', exact: true })
             .click()
           await expect(page.getByRole('dialog')).toHaveCount(0)
+          await page.locator('.npi-bom-name-link').first().click()
           await page
             .getByRole('button', { name: '转交采购', exact: true })
             .click()

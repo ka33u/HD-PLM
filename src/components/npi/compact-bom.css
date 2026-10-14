@@ -1,0 +1,337 @@
+/* The BOM is a working grid: one line per item, secondary fields in its detail dialog. */
+.npi-bom-layout .npi-project-summary {
+  position: static;
+  padding: 12px 18px;
+  margin-bottom: 10px;
+}
+.npi-bom-layout .npi-project-summary .npi-heading {
+  margin-bottom: 6px;
+}
+.npi-bom-layout .npi-project-summary h1 {
+  font-size: 21px;
+}
+.npi-bom-layout .npi-project-summary .npi-heading p {
+  margin: 4px 0;
+}
+.npi-bom-layout .npi-project-facts {
+  padding-top: 8px;
+  gap: 8px;
+  font-size: 12px;
+}
+.npi-bom-focus > .npi-project-summary,
+.npi-bom-focus > .npi-back,
+.npi-bom-focus [role='tablist'] {
+  display: none;
+}
+.npi-bom-workspace {
+  overflow: hidden;
+}
+.npi-bom-workspace .npi-panel-title {
+  padding: 12px 14px;
+  margin: 0;
+  gap: 8px;
+}
+.npi-bom-workspace h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.npi-bom-workspace .npi-button {
+  font-size: 12px;
+  padding: 6px 10px;
+  min-height: 30px;
+}
+.npi-bom-workspace input:not([type='checkbox']),
+.npi-bom-workspace select {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.npi-bom-heading-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.npi-bom-project-label {
+  color: #64748b;
+  font-size: 12px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.npi-bom-import-tools {
+  border-top: 1px solid #e5ebf3;
+  border-bottom: 1px solid #e5ebf3;
+}
+.npi-bom-import-tools > summary {
+  cursor: pointer;
+  padding: 7px 14px;
+  color: #48678e;
+  font-size: 12px;
+}
+.npi-bom-import-tools .npi-upload {
+  margin: 0 12px 12px;
+}
+.npi-bom-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #e4eaf3;
+  background: #fbfcfe;
+  font-size: 12px;
+}
+.npi-bom-toolbar .npi-bom-search {
+  margin-left: auto;
+  width: 190px;
+}
+.npi-bom-toolbar .npi-filters {
+  padding: 0;
+  margin: 0;
+  gap: 3px;
+}
+.npi-bom-toolbar .npi-filters button {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.npi-bom-selection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 14px;
+  background: #eef5ff;
+  font-size: 12px;
+}
+.npi-bom-selection > span {
+  margin-right: auto;
+}
+.npi-bom-grid {
+  max-height: 64dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.npi-bom-focus .npi-bom-grid {
+  max-height: calc(100dvh - 240px);
+}
+.npi-bom-dense {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 960px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+.npi-bom-dense th,
+.npi-bom-dense td {
+  height: 34px;
+  padding: 3px 8px !important;
+  min-width: 0 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  border-bottom: 1px solid #e9eef5;
+  line-height: 22px;
+}
+.npi-bom-dense th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f2f5fa;
+  font-size: 11px;
+}
+.npi-bom-dense td {
+  background: #fff;
+}
+.npi-bom-dense tr:nth-child(even) td {
+  background: #fbfcfe;
+}
+.npi-bom-dense tr:hover td {
+  background: #f1f6fe;
+}
+.npi-bom-dense tr.is-selected td {
+  background: #eaf2ff;
+}
+.npi-bom-dense th:first-child,
+.npi-bom-dense td:first-child {
+  position: sticky;
+  left: 0;
+  width: 34px;
+  text-align: center;
+  z-index: 1;
+}
+.npi-bom-dense th:nth-child(2),
+.npi-bom-dense td:nth-child(2) {
+  position: sticky;
+  left: 34px;
+  z-index: 1;
+}
+.npi-bom-dense th:first-child,
+.npi-bom-dense th:nth-child(2) {
+  z-index: 3;
+}
+.npi-bom-dense input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  accent-color: #2563c7;
+  cursor: pointer;
+}
+.npi-bom-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+}
+.npi-bom-name-link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #243e61;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.npi-bom-name-link:hover {
+  color: #2563c7;
+  text-decoration: underline;
+}
+.npi-bom-toggle,
+.npi-bom-level {
+  flex: 0 0 16px;
+  width: 16px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #7790b0;
+  text-align: center;
+}
+.npi-bom-toggle {
+  cursor: pointer;
+}
+.npi-bom-dense .npi-link {
+  padding: 0;
+  font-size: 12px;
+}
+.npi-bom-status {
+  font-size: 11px;
+  color: #64748b;
+}
+.npi-bom-status.risk {
+  color: #b57214;
+}
+.npi-bom-status.overdue {
+  color: #c13b42;
+}
+.npi-bom-status.completed {
+  color: #278059;
+}
+.npi-bom-workspace .npi-pagination {
+  padding: 8px 14px;
+  margin: 0;
+}
+.npi-bom-workspace .npi-pagination .npi-button {
+  padding: 3px 7px;
+  min-height: 26px;
+}
+.npi-bom-footnote {
+  padding: 6px 14px;
+  margin: 0;
+  font-size: 11px;
+  color: #79899e;
+}
+.npi-bom-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin: 16px 0;
+}
+.npi-bom-detail-grid dt {
+  font-size: 12px;
+  color: #7a899d;
+}
+.npi-bom-detail-grid dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .npi-bom-workspace .npi-panel-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .npi-bom-layout .npi-project-summary {
+    padding: 10px 12px;
+  }
+  .npi-bom-layout .npi-project-summary h1 {
+    font-size: 18px;
+  }
+  .npi-bom-layout .npi-project-facts {
+    display: none;
+  }
+  .npi-bom-toolbar .npi-bom-search {
+    width: 100%;
+    margin-left: 0;
+  }
+  .npi-bom-dense td,
+  .npi-bom-dense th {
+    height: 38px;
+  }
+  .npi-bom-focus .npi-bom-grid {
+    max-height: calc(100dvh - 285px);
+  }
+  .npi-bom-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Focus keeps the grid and its footer in one viewport, including the selection bar. */
+.npi-bom-focus {
+  padding-top: 12px;
+}
+.npi-bom-focus .npi-bom-workspace {
+  height: calc(100dvh - 108px);
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+.npi-bom-focus .npi-bom-workspace > [aria-label='BOM版本内容']:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.npi-bom-focus .npi-bom-grid {
+  flex: 1;
+  min-height: 120px;
+  max-height: none;
+}
+.npi-bom-focus .npi-bom-workspace > .npi-panel-title,
+.npi-bom-focus .npi-bom-toolbar,
+.npi-bom-focus .npi-bom-selection {
+  flex-shrink: 0;
+}
+.npi-bom-workspace > [aria-label='BOM版本内容'] > .npi-actions {
+  padding: 6px 14px;
+}
+@media (max-width: 760px) {
+  .npi-bom-focus .npi-bom-workspace {
+    height: calc(100dvh - 210px);
+  }
+}
+.npi-bom-focus .npi-bom-workspace:has(.npi-bom-import-tools[open]),
+.npi-bom-focus .npi-bom-workspace:has(.npi-preview) {
+  height: auto;
+}
+.npi-bom-focus
+  .npi-bom-workspace:has(.npi-bom-import-tools[open])
+  .npi-bom-grid,
+.npi-bom-focus .npi-bom-workspace:has(.npi-preview) .npi-bom-grid {
+  flex: none;
+  max-height: 64dvh;
+}

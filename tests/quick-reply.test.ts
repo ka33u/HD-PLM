@@ -514,6 +514,7 @@ try {
         .getByRole('button', { name: '完成时间快速回复', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('每页显示', { exact: true }).selectOption('25')
       const rowDates = dialog.locator('tbody input[type=date]')
       await expect(rowDates).toHaveCount(25)
       const ids = await dialog
@@ -743,7 +744,7 @@ try {
       const sp = await limited.newPage()
       await sp.goto(root + '/npi?view=manufacturing')
       await expect(
-        sp.getByRole('heading', { name: '生产任务', exact: true }),
+        sp.getByRole('heading', { name: '生产任务', exact: true, level: 1 }),
       ).toBeVisible()
       await expect(
         sp.getByRole('button', { name: '完成时间快速回复', exact: true }),
@@ -764,6 +765,10 @@ try {
         .getByRole('dialog')
         .getByLabel('快速回复状态')
         .selectOption('all')
+      await ap
+        .getByRole('dialog')
+        .getByLabel('每页显示', { exact: true })
+        .selectOption('25')
       await expect(ap.getByRole('dialog').locator('tbody tr')).toHaveCount(25)
       await ap
         .getByRole('dialog')

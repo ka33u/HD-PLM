@@ -8,6 +8,7 @@ import {
   projectLocation,
   projectTabs,
 } from './workspace-location'
+import { NpiBomTable } from './NpiBomTable'
 import { NpiQuickReply } from './NpiQuickReply'
 import { NpiProjectTrash } from './NpiProjectTrash'
 import { NpiBomRevision } from './NpiBomRevision'
@@ -97,6 +98,7 @@ import type {
 import type { BomDifference, BomPreview, BomRow } from '../../lib/npi/bom'
 import type { FormEvent, ReactNode } from 'react'
 import './npi.css'
+import './compact-bom.css'
 
 const moduleIcons = {
   trash: Trash2,
@@ -210,6 +212,7 @@ export function NpiWorkspace() {
   const [quickReply, setQuickReply] = useState<{
     kind: 'manufacturing' | 'procurement'
     projectId?: string
+    itemIds?: string[]
   } | null>(null)
   const routeInitialized = useRef(false)
   const lastNavigationUrl = useRef(
@@ -303,7 +306,7 @@ export function NpiWorkspace() {
         }
         const t = trackingByBom.get(r.id)
         return (
-          `${r.materialCode} ${r.materialName}`
+          `${r.materialCode} ${r.materialName} ${r.specification}`
             .toLowerCase()
             .includes(search.trim().toLowerCase()) &&
           (effectiveBomMode === 'all' ||
@@ -719,6 +722,12 @@ export function NpiWorkspace() {
       ],
     })
   const [selectedBom, setSelectedBom] = useState<string[]>([])
+  const [bomFocus, setBomFocus] = useState(false)
+  const [bomDetailRow, setBomDetailRow] = useState<BomRow | null>(null)
+  useEffect(() => {
+    setBomDetailRow(null)
+    setBomFocus(false)
+  }, [project?.id, bomVersion, tab])
   useEffect(() => setSelectedBom([]), [bomVersion, project?.id])
   const [revisionRow, setRevisionRow] = useState<BomRow | null>(null)
   const showTracking = (row: BomRow, purchase = false) => {
@@ -1445,7 +1454,9 @@ export function NpiWorkspace() {
             刷新
           </button>
         </header>
-        <div className="npi-content">
+        <div
+          className={`npi-content ${view === 'project' && tab === 'bom' ? 'npi-bom-layout' : ''} ${view === 'project' && tab === 'bom' && bomFocus ? 'npi-bom-focus' : ''}`}
+        >
           {error && (
             <div role="alert" className="npi-message error">
               <AlertTriangle size={18} />
@@ -1980,30 +1991,7 @@ export function NpiWorkspace() {
                   />
                 </TabsContent>
                 <TabsContent value="bom">
-                  <section className="npi-panel">
-                    <ol className="npi-import-steps" aria-label="BOM导入步骤">
-                      {['上传文件', '数据预览', '解析确认', '导入完成'].map(
-                        (label, index) => {
-                          const step = completedImport
-                            ? 3
-                            : preview
-                              ? bomConfirmation
-                                ? 2
-                                : 1
-                              : 0
-                          return (
-                            <li
-                              key={label}
-                              className={index <= step ? 'reached' : ''}
-                              aria-current={index === step ? 'step' : undefined}
-                            >
-                              <span>{index + 1}</span>
-                              {label}
-                            </li>
-                          )
-                        },
-                      )}
-                    </ol>
+                  <section className="npi-panel npi-bom-workspace">
                     {completedImport && (
                       <div className="npi-import-success" role="status">
                         <CheckCircle2 size={20} />
@@ -2016,89 +2004,150 @@ export function NpiWorkspace() {
                       </div>
                     )}
                     <div className="npi-panel-title">
-                      <h2>ERP 多阶BOM</h2>
-                      <select
-                        aria-label="BOM版本"
-                        value={bomLoading ?? bomVersion}
-                        disabled={busy}
-                        onChange={(e) => void loadBom(e.target.value)}
-                      >
-                        {!project.imports.length && (
-                          <option value="">尚未导入</option>
-                        )}
-                        {project.imports.map((i) => (
-                          <option value={i.id} key={i.id}>
-                            V{i.versionNo} · {i.rowCount}项{' '}
-                            {i.id === project.activeBomImportId
-                              ? '（当前）'
-                              : '（历史）'}
-                          </option>
-                        ))}
-                      </select>
+                      <h2 title={projectTitle(project)}>
+                        BOM 明细{' '}
+                        <span className="npi-bom-project-label">
+                          · {project.code}
+                        </span>
+                      </h2>
+                      <div className="npi-bom-heading-actions">
+                        <select
+                          aria-label="BOM版本"
+                          value={bomLoading ?? bomVersion}
+                          disabled={busy}
+                          onChange={(e) => void loadBom(e.target.value)}
+                        >
+                          {!project.imports.length && (
+                            <option value="">尚未导入</option>
+                          )}
+                          {project.imports.map((i) => (
+                            <option value={i.id} key={i.id}>
+                              V{i.versionNo} · {i.rowCount}项{' '}
+                              {i.id === project.activeBomImportId
+                                ? '（当前）'
+                                : '（历史）'}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="npi-button secondary"
+                          aria-pressed={bomFocus}
+                          onClick={() => setBomFocus(!bomFocus)}
+                        >
+                          {bomFocus ? '退出专注' : '专注明细'}
+                        </button>
+                      </div>
                     </div>
                     {['admin', 'technical'].includes(meta?.actor.role || '') &&
                       project.currentNpiStage !== 'completed' && (
-                        <div className="npi-upload">
-                          <FileSpreadsheet size={28} />
-                          <div>
-                            <strong>导入ERP导出的原始Excel</strong>
-                            <p>
-                              上传 → 解析预览 →
-                              确认新版本；不覆盖旧BOM及承诺历史。
-                            </p>
-                            <input
-                              type="file"
-                              aria-label="上传ERP BOM"
-                              disabled={busy}
-                              accept=".xlsx"
-                              onChange={(e) => {
-                                setUploadFile(e.target.files?.[0] || null)
-                                setPreview(null)
-                                setBomConfirmation(false)
-                                setCompletedImport('')
-                              }}
-                            />
-                            <select
-                              aria-label="导入模板"
-                              disabled={busy}
-                              value={templateId}
-                              onChange={(e) => {
-                                setTemplateId(e.target.value)
-                                setPreview(null)
-                                setBomConfirmation(false)
-                                setCompletedImport('')
-                              }}
-                            >
-                              <option value="">自动识别模板</option>
-                              {meta?.templates
-                                .filter((t) => t.enabled)
-                                .map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                          <button
-                            className="npi-button"
-                            disabled={!uploadFile || busy}
-                            onClick={() => void parseUpload()}
+                        <details
+                          className="npi-bom-import-tools"
+                          key={project.id}
+                          open={
+                            !project.imports.length || !!preview || undefined
+                          }
+                        >
+                          <summary>导入新版 / 导入草稿</summary>
+                          <ol
+                            className="npi-import-steps"
+                            aria-label="BOM导入步骤"
                           >
-                            <Upload size={16} />
-                            {busy ? '处理中…' : '解析预览'}
-                          </button>
-                        </div>
-                      )}
-                    {['admin', 'technical'].includes(meta?.actor.role || '') &&
-                      project.currentNpiStage !== 'completed' && (
-                        <NpiBomDrafts
-                          api={api}
-                          projectId={project.id}
-                          revision={draftRevision}
-                          busy={busy}
-                          onResume={(draft) => draftAction(draft, 'resume')}
-                          onDiscard={(draft) => draftAction(draft, 'discard')}
-                        />
+                            {[
+                              '上传文件',
+                              '数据预览',
+                              '解析确认',
+                              '导入完成',
+                            ].map((label, index) => {
+                              const step = completedImport
+                                ? 3
+                                : preview
+                                  ? bomConfirmation
+                                    ? 2
+                                    : 1
+                                  : 0
+                              return (
+                                <li
+                                  key={label}
+                                  className={index <= step ? 'reached' : ''}
+                                  aria-current={
+                                    index === step ? 'step' : undefined
+                                  }
+                                >
+                                  <span>{index + 1}</span>
+                                  {label}
+                                </li>
+                              )
+                            })}
+                          </ol>
+                          {['admin', 'technical'].includes(
+                            meta?.actor.role || '',
+                          ) && (
+                            <div className="npi-upload">
+                              <FileSpreadsheet size={28} />
+                              <div>
+                                <strong>导入ERP导出的原始Excel</strong>
+                                <p>
+                                  上传 → 解析预览 →
+                                  确认新版本；不覆盖旧BOM及承诺历史。
+                                </p>
+                                <input
+                                  type="file"
+                                  aria-label="上传ERP BOM"
+                                  disabled={busy}
+                                  accept=".xlsx"
+                                  onChange={(e) => {
+                                    setUploadFile(e.target.files?.[0] || null)
+                                    setPreview(null)
+                                    setBomConfirmation(false)
+                                    setCompletedImport('')
+                                  }}
+                                />
+                                <select
+                                  aria-label="导入模板"
+                                  disabled={busy}
+                                  value={templateId}
+                                  onChange={(e) => {
+                                    setTemplateId(e.target.value)
+                                    setPreview(null)
+                                    setBomConfirmation(false)
+                                    setCompletedImport('')
+                                  }}
+                                >
+                                  <option value="">自动识别模板</option>
+                                  {meta?.templates
+                                    .filter((t) => t.enabled)
+                                    .map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                              <button
+                                className="npi-button"
+                                disabled={!uploadFile || busy}
+                                onClick={() => void parseUpload()}
+                              >
+                                <Upload size={16} />
+                                {busy ? '处理中…' : '解析预览'}
+                              </button>
+                            </div>
+                          )}
+                          {['admin', 'technical'].includes(
+                            meta?.actor.role || '',
+                          ) && (
+                            <NpiBomDrafts
+                              api={api}
+                              projectId={project.id}
+                              revision={draftRevision}
+                              busy={busy}
+                              onResume={(draft) => draftAction(draft, 'resume')}
+                              onDiscard={(draft) =>
+                                draftAction(draft, 'discard')
+                              }
+                            />
+                          )}
+                        </details>
                       )}
                     {reconciliation && reconciliation.items.length > 0 && (
                       <div
@@ -2328,91 +2377,131 @@ export function NpiWorkspace() {
                       </p>
                     )}
                     <div hidden={bomLoading !== null} aria-label="BOM版本内容">
-                      {meta &&
-                        project.currentNpiStage !== 'completed' &&
-                        ['admin', 'technical', 'manufacturing'].includes(
-                          meta.actor.role,
-                        ) && (
-                          <div className="npi-quick-entry">
-                            <div>
-                              <strong>批量回复部件日期</strong>
-                              <p>
-                                表格内连续填写、多选统一日期，已分配的部件一次提交。
-                              </p>
-                            </div>
-                            <div className="npi-actions">
-                              <button
-                                className="npi-button"
-                                onClick={() =>
-                                  setQuickReply({
-                                    kind: 'manufacturing',
-                                    projectId: project.id,
-                                  })
-                                }
-                              >
-                                <Zap size={16} />
-                                生产完成时间快速回复
-                              </button>
-                              {meta.actor.role === 'admin' && (
+                      <div className="npi-bom-toolbar">
+                        <div className="npi-filters">
+                          {[
+                            ['all', '完整BOM'],
+                            ['first', '一级'],
+                            ['untracked', '待复核'],
+                            ['abnormal', '未完成 / 异常'],
+                          ].map(([k, label]) => (
+                            <button
+                              key={k}
+                              aria-pressed={effectiveBomMode === k}
+                              className={effectiveBomMode === k ? 'active' : ''}
+                              onClick={() => setBomMode(k!)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          className="npi-bom-search"
+                          aria-label="搜索BOM"
+                          type="search"
+                          placeholder="编码 / 名称 / 规格"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                        />
+                        {meta &&
+                          project.currentNpiStage !== 'completed' &&
+                          bomVersion === project.activeBomImportId &&
+                          [
+                            'admin',
+                            'technical',
+                            'manufacturing',
+                            'procurement',
+                          ].includes(meta.actor.role) && (
+                            <>
+                              {meta.actor.role !== 'procurement' && (
+                                <button
+                                  className="npi-button"
+                                  aria-label="生产完成时间快速回复"
+                                  disabled={
+                                    !!selectedBom.length &&
+                                    !selectedBom.some((id) => {
+                                      const t = trackingByBom.get(id)
+                                      return (
+                                        t &&
+                                        t.trackingType !== 'purchase' &&
+                                        canReply(t)
+                                      )
+                                    })
+                                  }
+                                  onClick={() =>
+                                    setQuickReply({
+                                      kind: 'manufacturing',
+                                      projectId: project.id,
+                                      itemIds: selectedBom.length
+                                        ? selectedBom
+                                            .map((id) => trackingByBom.get(id))
+                                            .filter(
+                                              (t) =>
+                                                t &&
+                                                t.trackingType !== 'purchase' &&
+                                                canReply(t),
+                                            )
+                                            .map((t) => t!.id)
+                                        : undefined,
+                                    })
+                                  }
+                                >
+                                  <Zap size={14} />
+                                  {selectedBom.length
+                                    ? '回复所选生产件'
+                                    : '生产回复'}
+                                </button>
+                              )}
+                              {['admin', 'procurement'].includes(
+                                meta.actor.role,
+                              ) && (
                                 <button
                                   className="npi-button secondary"
+                                  aria-label="采购完成时间快速回复"
+                                  disabled={
+                                    !!selectedBom.length &&
+                                    !selectedBom.some((id) => {
+                                      const t = trackingByBom.get(id)
+                                      return (
+                                        t?.trackingType === 'purchase' &&
+                                        canReply(t)
+                                      )
+                                    })
+                                  }
                                   onClick={() =>
                                     setQuickReply({
                                       kind: 'procurement',
                                       projectId: project.id,
+                                      itemIds: selectedBom.length
+                                        ? selectedBom
+                                            .map((id) => trackingByBom.get(id))
+                                            .filter(
+                                              (t) =>
+                                                t?.trackingType ===
+                                                  'purchase' && canReply(t),
+                                            )
+                                            .map((t) => t!.id)
+                                        : undefined,
                                     })
                                   }
                                 >
-                                  <Zap size={16} />
-                                  采购完成时间快速回复
+                                  {selectedBom.length
+                                    ? '回复所选采购件'
+                                    : '采购回复'}
                                 </button>
                               )}
-                            </div>
-                          </div>
-                        )}
-
-                      <p className="npi-muted">
-                        所有当前BOM零部件默认分配给制造负责人，均需回复完成时间；勾选多项可一次转交采购或其他生产人员。旧版发生变化的任务先复核，承诺与历史继续保留。
-                      </p>
-                      {canAdjustPlan &&
-                        project.currentNpiStage !== 'completed' &&
-                        bomVersion === project.activeBomImportId && (
-                          <div className="npi-quick-entry">
+                            </>
+                          )}
+                      </div>
+                      {project.currentNpiStage !== 'completed' &&
+                        bomVersion === project.activeBomImportId &&
+                        selectedBom.length > 0 && (
+                          <div className="npi-bom-selection">
                             <span>
-                              已选择 {selectedBom.length}{' '}
-                              项（跨页保留，最多200项）
+                              已选 {selectedBom.length} 项 · Shift 连选 ·
+                              跨页保留
                             </span>
-                            <div className="npi-actions">
-                              <button
-                                className="npi-button secondary"
-                                onClick={() =>
-                                  setSelectedBom(
-                                    [
-                                      ...new Set([
-                                        ...selectedBom,
-                                        ...bomPage.items
-                                          .filter((r) => {
-                                            const t = trackingByBom.get(r.id)
-                                            return (
-                                              t &&
-                                              !t.actualCompleteDate &&
-                                              t.bomReference?.current !== false
-                                            )
-                                          })
-                                          .map((r) => r.id),
-                                      ]),
-                                    ].slice(0, 200),
-                                  )
-                                }
-                              >
-                                选择本页可分配任务
-                              </button>
-                              <button
-                                className="npi-button secondary"
-                                onClick={() => setSelectedBom([])}
-                              >
-                                清空选择
-                              </button>
+                            {canAdjustPlan && (
                               <button
                                 className="npi-button"
                                 disabled={!selectedBom.length}
@@ -2452,35 +2541,15 @@ export function NpiWorkspace() {
                               >
                                 批量分配 / 转采购
                               </button>
-                            </div>
+                            )}
+                            <button
+                              className="npi-link"
+                              onClick={() => setSelectedBom([])}
+                            >
+                              清空选择
+                            </button>
                           </div>
                         )}
-                      <div className="npi-panel-title">
-                        <div className="npi-filters">
-                          {[
-                            ['all', '完整BOM'],
-                            ['first', '只看一级'],
-                            ['untracked', '待复核分配'],
-                            ['abnormal', '异常物料'],
-                          ].map(([k, label]) => (
-                            <button
-                              key={k}
-                              className={effectiveBomMode === k ? 'active' : ''}
-                              aria-pressed={effectiveBomMode === k}
-                              onClick={() => setBomMode(k!)}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <input
-                          aria-label="搜索BOM"
-                          type="search"
-                          placeholder="搜索编码 / 名称"
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                        />
-                      </div>
                       {compactBom && bomMode === 'auto' && (
                         <p className="npi-bom-hint" role="status">
                           {search.trim()
@@ -2488,196 +2557,52 @@ export function NpiWorkspace() {
                             : '手机默认显示异常物料；搜索可查全部BOM，也可点击“完整BOM”展开。'}
                         </p>
                       )}
-                      <NpiPagination
-                        label="BOM明细顶部翻页"
-                        {...bomPage}
-                        disabled={loading || busy}
-                      />
-                      <div className="npi-table-scroll" ref={bomPageStart}>
-                        <table
-                          className="npi-table npi-tracking-table npi-bom-table"
-                          aria-label="完整BOM明细"
-                        >
-                          <thead>
-                            <tr>
-                              <th>层级 / 物料名称</th>
-                              <th>物料编码</th>
-                              <th>规格</th>
-                              <th>数量</th>
-                              <th>供应 / 部门</th>
-                              <th>仓库</th>
-                              <th>状态 / 责任人</th>
-                              <th>分配与回复</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {bomPage.items.map((r) => {
-                              const t = trackingByBom.get(r.id)
-                              return (
-                                <tr key={r.id}>
-                                  <td data-label="层级 / 物料名称">
-                                    <div
-                                      className="npi-tree-name"
-                                      style={{
-                                        paddingLeft: compactBom
-                                          ? 0
-                                          : Math.min(r.level - 1, 10) * 18,
-                                      }}
-                                    >
-                                      {parentIds.has(r.id) ? (
-                                        <button
-                                          className="npi-tree-toggle"
-                                          aria-label={`${collapsed.has(r.id) ? '展开' : '收起'}${r.materialName}`}
-                                          aria-expanded={!collapsed.has(r.id)}
-                                          onClick={() =>
-                                            setCollapsed((previous) => {
-                                              const next = new Set(previous)
-                                              if (next.has(r.id))
-                                                next.delete(r.id)
-                                              else next.add(r.id)
-                                              return next
-                                            })
-                                          }
-                                        >
-                                          {collapsed.has(r.id) ? '▸' : '▾'}
-                                        </button>
-                                      ) : (
-                                        <span>└</span>
-                                      )}
-                                      <span>{r.level}级</span>
-                                      <strong>{r.materialName}</strong>
-                                    </div>
-                                    {r.parentId && (
-                                      <small className="npi-bom-parent">
-                                        上级：
-                                        {bomMap.get(r.parentId)?.materialName ||
-                                          '—'}{' '}
-                                        ·{' '}
-                                        {bomMap.get(r.parentId)?.materialCode ||
-                                          '—'}
-                                      </small>
-                                    )}
-                                  </td>
-                                  <td data-label="物料编码">
-                                    <span className="npi-bom-value">
-                                      {r.materialCode}
-                                    </span>
-                                  </td>
-                                  <td data-label="规格">
-                                    <span className="npi-bom-value">
-                                      {r.specification || '—'}
-                                    </span>
-                                  </td>
-                                  <td data-label="数量">
-                                    <span className="npi-bom-value">
-                                      {r.qty} {r.unit}
-                                    </span>
-                                  </td>
-                                  <td data-label="供应 / 部门">
-                                    <div className="npi-bom-value">
-                                      {r.supplyType || '—'}
-                                      <small>{r.issueDepartment || '—'}</small>
-                                    </div>
-                                  </td>
-                                  <td data-label="仓库">
-                                    <span className="npi-bom-value">
-                                      {r.warehouse || '—'}
-                                    </span>
-                                  </td>
-                                  <td data-label="状态 / 责任人">
-                                    <div className="npi-bom-value">
-                                      {t &&
-                                      (t.trackingEnabled || t.affectsKit) ? (
-                                        <>
-                                          <Badge status={t.status} />
-                                          <small>{t.ownerName}</small>
-                                        </>
-                                      ) : (
-                                        <span className="npi-muted">
-                                          待换版复核
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td data-label="分配与回复">
-                                    {bomVersion === project.activeBomImportId &&
-                                      project.currentNpiStage !==
-                                        'completed' && (
-                                        <div className="npi-row-actions">
-                                          {canAdjustPlan &&
-                                            t &&
-                                            !t.actualCompleteDate && (
-                                              <button
-                                                onClick={() =>
-                                                  showTracking(r, true)
-                                                }
-                                              >
-                                                转交采购
-                                              </button>
-                                            )}
-                                          {(meta?.actor.role === 'admin' ||
-                                            (meta?.actor.role === 'technical' &&
-                                              meta.actor.id ===
-                                                project.technicalOwnerId)) && (
-                                            <button
-                                              onClick={() => setRevisionRow(r)}
-                                            >
-                                              修订物料
-                                            </button>
-                                          )}
-                                        </div>
-                                      )}
-                                    {canAdjustPlan &&
-                                      project.currentNpiStage !== 'completed' &&
-                                      t &&
-                                      !t.actualCompleteDate &&
-                                      bomVersion ===
-                                        project.activeBomImportId && (
-                                        <>
-                                          <label className="npi-checkbox">
-                                            <input
-                                              type="checkbox"
-                                              aria-label={`选择${r.materialCode}第${r.rowNo}行`}
-                                              checked={selectedBom.includes(
-                                                r.id,
-                                              )}
-                                              onChange={(e) =>
-                                                setSelectedBom((previous) =>
-                                                  e.target.checked
-                                                    ? [...previous, r.id].slice(
-                                                        0,
-                                                        200,
-                                                      )
-                                                    : previous.filter(
-                                                        (id) => id !== r.id,
-                                                      ),
-                                                )
-                                              }
-                                            />
-                                            选择
-                                          </label>
-                                          <button
-                                            className="npi-link"
-                                            onClick={() => showTracking(r)}
-                                          >
-                                            调整分配
-                                          </button>
-                                        </>
-                                      )}
-                                    {t && canReply(t) && (
-                                      <button
-                                        className="npi-link"
-                                        onClick={() => showPromise(t)}
-                                      >
-                                        回复完成时间
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                      <div
+                        className="npi-table-scroll npi-bom-grid"
+                        ref={bomPageStart}
+                      >
+                        <NpiBomTable
+                          rows={bomPage.items}
+                          tasks={trackingByBom}
+                          parents={parentIds}
+                          collapsed={collapsed}
+                          onToggle={(id) =>
+                            setCollapsed((previous) => {
+                              const next = new Set(previous)
+                              if (next.has(id)) next.delete(id)
+                              else next.add(id)
+                              return next
+                            })
+                          }
+                          selected={selectedBom}
+                          onSelect={setSelectedBom}
+                          canSelect={(row) => {
+                            const t = trackingByBom.get(row.id)
+                            return !!(
+                              t &&
+                              (canAdjustPlan || canReply(t)) &&
+                              project.currentNpiStage !== 'completed' &&
+                              bomVersion === project.activeBomImportId &&
+                              !t.actualCompleteDate &&
+                              t.bomReference?.current !== false
+                            )
+                          }}
+                          onDetails={setBomDetailRow}
+                          canReply={(t) =>
+                            bomVersion === project.activeBomImportId &&
+                            canReply(t)
+                          }
+                          onReply={(t) =>
+                            setQuickReply({
+                              kind:
+                                t.trackingType === 'purchase'
+                                  ? 'procurement'
+                                  : 'manufacturing',
+                              projectId: project.id,
+                              itemIds: [t.id],
+                            })
+                          }
+                        />
                         {!visibleBom.length && (
                           <Empty
                             title={
@@ -2696,11 +2621,15 @@ export function NpiWorkspace() {
                                   !search.trim()
                                   ? '可搜索编码或名称查看任意物料，也可切换完整BOM。'
                                   : '请调整搜索或筛选条件，也可展开已收起的上级物料。'
-                                : '先上传ERP多阶BOM，再从任意层级选出关键物料。'
+                                : '上传ERP多阶BOM后，所有零部件自动分配给制造负责人。'
                             }
                           />
                         )}
                       </div>
+                      <p className="npi-bom-footnote">
+                        {visibleBom.length} 行 · 点击名称查看完整资料与更多操作
+                        · 勾选后批量回复或转采购 · 手机可横向滑动
+                      </p>
                       <NpiPagination
                         label="BOM明细分页"
                         {...bomPage}
@@ -2846,6 +2775,120 @@ export function NpiWorkspace() {
             )}
         </div>
       </main>
+      {bomDetailRow && project && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setBomDetailRow(null)
+          }}
+        >
+          <DialogContent className="npi-modal">
+            <DialogTitle>{bomDetailRow.materialName}</DialogTitle>
+            <DialogDescription>
+              {bomDetailRow.materialCode} · 原表第{bomDetailRow.rowNo}行 ·{' '}
+              {bomDetailRow.level}级 · {project.code}
+            </DialogDescription>
+            <dl className="npi-bom-detail-grid">
+              {[
+                ['规格', bomDetailRow.specification],
+                ['数量', `${bomDetailRow.qty} ${bomDetailRow.unit}`],
+                ['上级', bomMap.get(bomDetailRow.parentId || '')?.materialName],
+                ['供应类型', bomDetailRow.supplyType],
+                ['领料部门', bomDetailRow.issueDepartment],
+                ['仓库', bomDetailRow.warehouse],
+                ['生效日期', bomDetailRow.effectiveDate],
+                ['备注', bomDetailRow.remark],
+                ['责任人', trackingByBom.get(bomDetailRow.id)?.ownerName],
+                ['要求日期', trackingByBom.get(bomDetailRow.id)?.requiredDate],
+                [
+                  '首次承诺',
+                  trackingByBom.get(bomDetailRow.id)?.firstCommittedDate,
+                ],
+                [
+                  '当前承诺',
+                  trackingByBom.get(bomDetailRow.id)?.currentCommittedDate,
+                ],
+                [
+                  '实际完成',
+                  trackingByBom.get(bomDetailRow.id)?.actualCompleteDate,
+                ],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value || '—'}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="npi-actions">
+              {bomVersion === project.activeBomImportId &&
+                project.currentNpiStage !== 'completed' && (
+                  <>
+                    {canAdjustPlan &&
+                      trackingByBom.get(bomDetailRow.id) &&
+                      !trackingByBom.get(bomDetailRow.id)
+                        ?.actualCompleteDate && (
+                        <>
+                          <button
+                            className="npi-button secondary"
+                            onClick={() => {
+                              showTracking(bomDetailRow, true)
+                              setBomDetailRow(null)
+                            }}
+                          >
+                            转交采购
+                          </button>
+                          <button
+                            className="npi-button secondary"
+                            onClick={() => {
+                              showTracking(bomDetailRow)
+                              setBomDetailRow(null)
+                            }}
+                          >
+                            调整分配
+                          </button>
+                        </>
+                      )}
+                    {(meta?.actor.role === 'admin' ||
+                      (meta?.actor.role === 'technical' &&
+                        meta.actor.id === project.technicalOwnerId)) && (
+                      <button
+                        className="npi-button secondary"
+                        onClick={() => {
+                          setRevisionRow(bomDetailRow)
+                          setBomDetailRow(null)
+                        }}
+                      >
+                        修订物料
+                      </button>
+                    )}
+                  </>
+                )}
+              {trackingByBom.get(bomDetailRow.id) && (
+                <>
+                  <button
+                    className="npi-button secondary"
+                    onClick={() => {
+                      setFileItem(trackingByBom.get(bomDetailRow.id)!)
+                      setBomDetailRow(null)
+                    }}
+                  >
+                    附件
+                  </button>
+                  <button
+                    className="npi-button secondary"
+                    onClick={() => {
+                      setHistoryItem(trackingByBom.get(bomDetailRow.id)!)
+                      setBomDetailRow(null)
+                    }}
+                  >
+                    承诺历史
+                  </button>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       {templateEditor && (
         <NpiImportTemplateEditor
           template={templateEditor}
@@ -3025,7 +3068,10 @@ export function NpiWorkspace() {
           actorId={meta.actor.id}
           {...quickReply}
           onClose={() => setQuickReply(null)}
-          onSaved={() => refresh()}
+          onSaved={async () => {
+            await refresh()
+            if (quickReply.itemIds) setSelectedBom([])
+          }}
         />
       )}
       {procurementReply && meta && (

@@ -498,7 +498,9 @@ try {
         .getByRole('table', { name: '完整BOM明细' })
         .getByRole('row')
         .filter({ hasText: '标准垫片' })
-      await untracked
+      await untracked.locator('.npi-bom-name-link').click()
+      await tech
+        .getByRole('dialog')
         .getByRole('button', { name: '修订物料', exact: true })
         .click()
       const revision = tech.getByRole('dialog')

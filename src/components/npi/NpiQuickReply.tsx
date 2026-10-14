@@ -20,6 +20,7 @@ import type {
   QuickReplyItems,
   batchReplyMaterials,
 } from '../../lib/npi/service'
+import { selectRange } from './table-selection'
 import './quick-reply.css'
 
 type Item = QuickReplyItems['items'][number]
@@ -43,6 +44,7 @@ export function NpiQuickReply({
   actorId,
   kind,
   projectId,
+  itemIds,
   onClose,
   onSaved,
 }: {
@@ -50,6 +52,7 @@ export function NpiQuickReply({
   actorId: string
   kind: 'manufacturing' | 'procurement'
   projectId?: string
+  itemIds?: string[]
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
@@ -59,7 +62,12 @@ export function NpiQuickReply({
     [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState(''),
     [project, setProject] = useState(''),
-    [filter, setFilter] = useState('pending')
+    [filter, setFilter] = useState(itemIds ? 'all' : 'pending')
+  const [pageSize, setPageSize] = useState(50)
+  const submittedIds = useRef(new Set<string>())
+  const anchor = useRef<string | null>(null),
+    initialized = useRef(false)
+  const scope = useMemo(() => (itemIds ? new Set(itemIds) : null), [itemIds])
   const [mode, setMode] = useState<'promise' | 'complete'>('promise')
   const [batchDate, setBatchDate] = useState(''),
     [reason, setReason] = useState('')
@@ -73,8 +81,11 @@ export function NpiQuickReply({
     nextFocus = useRef<string | null>(null)
   const inputs = useRef(new Map<string, HTMLInputElement>()),
     list = useRef<HTMLDivElement>(null)
-  const rows = data?.items || []
-  const rowMap = useMemo(() => new Map(rows.map((r) => [r.id, r])), [data])
+  const rows = useMemo(
+    () => (data?.items || []).filter((r) => !scope || scope.has(r.id)),
+    [data, scope],
+  )
+  const rowMap = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])
   const changes = Object.entries(drafts).filter(
     ([id, d]) =>
       mode === 'complete' || d.date !== rowMap.get(id)?.currentCommittedDate,
@@ -135,9 +146,9 @@ export function NpiQuickReply({
             (a.bomReference?.rowNo || 0) - (b.bomReference?.rowNo || 0) ||
             a.id.localeCompare(b.id),
         ),
-    [data, project, query, filter, filter === 'drafts' ? drafts : null],
+    [rows, project, query, filter, filter === 'drafts' ? drafts : null],
   )
-  const page = usePagination(visible, 25, list)
+  const page = usePagination(visible, pageSize, list)
   const projects = [
     ...new Map(
       rows.map((r) => [r.programId, `${r.projectCode} · ${r.motorModel}`]),
@@ -160,7 +171,17 @@ export function NpiQuickReply({
         throw new Error('登录账号已变化，请整页刷新')
       setData(result)
       setNeedsReload(false)
-      setSelected(new Set())
+      setSelected(
+        new Set(
+          !initialized.current && scope
+            ? result.items
+                .filter((r) => scope.has(r.id) && canEdit(r))
+                .slice(0, 50)
+                .map((r) => r.id)
+            : [],
+        ),
+      )
+      initialized.current = true
     } catch (e) {
       if (seq === request.current) {
         setError(e instanceof Error ? e.message : '读取失败')
@@ -169,7 +190,7 @@ export function NpiQuickReply({
     } finally {
       if (seq === request.current) setLoading(false)
     }
-  }, [api, actorId, kind, projectId])
+  }, [api, actorId, kind, projectId, scope])
   useEffect(() => {
     void load()
     return () => {
@@ -180,8 +201,17 @@ export function NpiQuickReply({
     setSelected(new Set())
   }, [query, project, filter])
   useEffect(() => {
-    if (nextFocus.current && inputs.current.has(nextFocus.current)) {
-      inputs.current.get(nextFocus.current)!.focus()
+    const id = nextFocus.current
+    if (!id || busy) return
+    const index = visible.findIndex((r) => r.id === id)
+    if (index < 0) {
+      nextFocus.current = null
+      return
+    }
+    const targetPage = Math.floor(index / pageSize) + 1
+    if (targetPage !== page.page) page.onPage(targetPage)
+    else if (inputs.current.has(id)) {
+      inputs.current.get(id)!.focus()
       nextFocus.current = null
     }
   })
@@ -237,21 +267,53 @@ export function NpiQuickReply({
     setError('')
     setNotice(`已填入 ${targets.length} 项，核对后点击底部提交。`)
   }
-  function nextRow(row: Item) {
+  function nextRow(row: Item, backwards = false) {
     const index = visible.findIndex((r) => r.id === row.id)
-    const next = visible.slice(index + 1).find(canEdit)
+    const next = (
+      backwards ? visible.slice(0, index).reverse() : visible.slice(index + 1)
+    ).find(canEdit)
     if (!next) {
-      setNotice('已到最后一个可回复部件，可以提交本次填写。')
+      setNotice(
+        backwards
+          ? '已到第一个可回复部件。'
+          : '已到最后一个可回复部件，可以提交本次填写。',
+      )
       return
     }
     nextFocus.current = next.id
     const nextPage =
-      Math.floor(visible.findIndex((r) => r.id === next.id) / 25) + 1
+      Math.floor(visible.findIndex((r) => r.id === next.id) / pageSize) + 1
     if (nextPage !== page.page) page.onPage(nextPage)
     else {
       inputs.current.get(next.id)?.focus()
       nextFocus.current = null
     }
+  }
+  function copyPrevious(row: Item) {
+    const previous = visible
+      .slice(
+        0,
+        visible.findIndex((r) => r.id === row.id),
+      )
+      .reverse()
+      .find(canEdit)
+    const value = previous
+      ? (drafts[previous.id]?.date ??
+        (mode === 'promise' ? previous.currentCommittedDate || '' : ''))
+      : ''
+    if (
+      !validDate(value) ||
+      (mode === 'complete' && value > (data?.today || ''))
+    ) {
+      setError('上一行没有可沿用的有效日期，请先填写上一行')
+      return
+    }
+    if (!drafts[row.id] && changes.length >= 50) {
+      setError('每批最多填写50项，请先提交当前内容')
+      return
+    }
+    edit(row, value)
+    setError('')
   }
   function pasteDates(row: Item, text: string) {
     const dates = text.trim().split(/\r?\n/).map(pastedDate)
@@ -325,6 +387,12 @@ export function NpiQuickReply({
       setSelected(new Set())
       setReason('')
       const saved = new Map(result.items.map((r) => [r.id, r]))
+      for (const id of saved.keys()) submittedIds.current.add(id)
+      const remaining = visible.filter(
+        (r) => !submittedIds.current.has(r.id) && canEdit(r),
+      )
+      nextFocus.current = remaining[0]?.id || null
+      if (scope) setSelected(new Set(remaining.slice(0, 50).map((r) => r.id)))
       setData(
         (before) =>
           before && {
@@ -384,8 +452,8 @@ export function NpiQuickReply({
               {kind === 'procurement' ? '采购' : '生产'}完成时间快速回复
             </DialogTitle>
             <DialogDescription>
-              直接填日期，Enter
-              连续下一行；同一天交付的部件多选后统一填入。填写后一次提交。
+              Enter 下一行 · Ctrl / ⌘ + D 沿用上一行 · 支持粘贴一列日期 ·
+              每批最多50项
             </DialogDescription>
           </div>
         </header>
@@ -414,13 +482,14 @@ export function NpiQuickReply({
                     if (changes.length)
                       setError('请先提交或撤回本次填写，再切换回复类型')
                     else {
+                      submittedIds.current.clear()
                       setMode('promise')
                       setDrafts({})
                       setSelected(new Set())
                       setBatchDate('')
                       setReason('')
                       setNotice('')
-                      setFilter('pending')
+                      setFilter(scope ? 'all' : 'pending')
                       setError('')
                     }
                   }}
@@ -435,6 +504,7 @@ export function NpiQuickReply({
                     if (changes.length)
                       setError('请先提交或撤回本次填写，再切换回复类型')
                     else {
+                      submittedIds.current.clear()
                       setMode('complete')
                       setDrafts({})
                       setSelected(new Set())
@@ -456,6 +526,13 @@ export function NpiQuickReply({
                   : '仅填写已实际完成的部件，提交后计入已完成'}
               </span>
             </div>
+            {scope && (
+              <p className="npi-quick-scope">
+                仅显示从 BOM 带入的 {scope.size} 项 · 当前可回复{' '}
+                {rows.filter(canEdit).length} 项
+                {scope.size > 50 ? ' · 分批填写，每批最多50项' : ''}
+              </p>
+            )}
             <div className="npi-quick-filters">
               <label className="npi-quick-search">
                 <Search size={16} />
@@ -494,6 +571,21 @@ export function NpiQuickReply({
                 <option value="review">待BOM复核</option>
                 <option value="drafts">本次已填</option>
               </select>
+              <select
+                aria-label="每页显示"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  page.onPage(1)
+                }}
+                disabled={busy}
+              >
+                {[25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    每页 {n} 行
+                  </option>
+                ))}
+              </select>
               <button
                 className="npi-button secondary"
                 disabled={busy}
@@ -508,6 +600,11 @@ export function NpiQuickReply({
                 <input
                   type="checkbox"
                   checked={allPage}
+                  ref={(node) => {
+                    if (node)
+                      node.indeterminate =
+                        !allPage && pageEditable.some((r) => selected.has(r.id))
+                  }}
                   disabled={busy || !pageEditable.length}
                   onChange={() =>
                     setSelected((before) => {
@@ -523,6 +620,22 @@ export function NpiQuickReply({
                 本页可回复
               </label>
               <strong>已选 {selected.size} 项</strong>
+              <button
+                className="npi-quick-link"
+                disabled={busy || !visible.some(canEdit)}
+                onClick={() =>
+                  setSelected(
+                    new Set(
+                      visible
+                        .filter(canEdit)
+                        .slice(0, 50)
+                        .map((r) => r.id),
+                    ),
+                  )
+                }
+              >
+                选择前50项
+              </button>
               <input
                 type="date"
                 aria-label="统一填写日期"
@@ -629,14 +742,14 @@ export function NpiQuickReply({
                   正在读取可回复部件…
                 </p>
               ) : (
-                <table className="npi-quick-table">
+                <table className="npi-quick-table npi-quick-dense">
                   <caption>部件日期快速回复清单</caption>
                   <thead>
                     <tr>
                       <th>选择</th>
-                      <th>部件 / BOM位置</th>
-                      <th>项目 / 主负责人</th>
-                      <th>要求 / 当前承诺</th>
+                      <th>部件 / 编码</th>
+                      <th>{projectId ? '负责人' : '项目 / 负责人'}</th>
+                      <th>要求日期</th>
                       <th>
                         {mode === 'promise' ? '本次预计日期' : '本次实际日期'}
                       </th>
@@ -672,47 +785,64 @@ export function NpiQuickReply({
                                 (!selected.has(row.id) && selected.size >= 50)
                               }
                               checked={selected.has(row.id)}
-                              onChange={() =>
-                                setSelected((before) => {
-                                  const next = new Set(before)
-                                  if (next.has(row.id)) next.delete(row.id)
-                                  else next.add(row.id)
-                                  return next
-                                })
-                              }
+                              onChange={(e) => {
+                                const shift = Boolean(
+                                  (e.nativeEvent as MouseEvent).shiftKey,
+                                )
+                                setSelected(
+                                  (before) =>
+                                    new Set(
+                                      selectRange(
+                                        [...before],
+                                        visible
+                                          .filter(canEdit)
+                                          .map((r) => r.id),
+                                        row.id,
+                                        e.target.checked,
+                                        anchor.current,
+                                        shift,
+                                        50,
+                                      ),
+                                    ),
+                                )
+                                anchor.current = row.id
+                              }}
                             />
                           </td>
-                          <td data-label="部件">
-                            <strong>{row.name}</strong>
-                            <small>
-                              {row.bomReference
-                                ? `${row.bomReference.materialCode} · V${row.bomReference.versionNo} 第${row.bomReference.rowNo}行`
-                                : 'BOM外物料'}{' '}
-                              · {row.qty}
-                              {row.unit}
-                            </small>
-                            <small>{row.specification}</small>
+                          <td
+                            data-label="部件"
+                            title={`${row.name} · ${row.specification} · ${row.qty}${row.unit}\n${row.bomReference ? `${row.bomReference.materialCode} · V${row.bomReference.versionNo} 第${row.bomReference.rowNo}行` : row.sourceType === 'WHOLE_MACHINE' ? '整机' : row.sourceType === 'TOOLING' ? '工装' : 'BOM外物料'}`}
+                          >
+                            <span className="npi-quick-part">
+                              <strong>{row.name}</strong>
+                              <span>
+                                {row.bomReference?.materialCode ||
+                                  (row.sourceType === 'WHOLE_MACHINE'
+                                    ? '整机'
+                                    : row.sourceType === 'TOOLING'
+                                      ? '工装'
+                                      : 'BOM外')}
+                              </span>
+                            </span>
                             {locked && (
                               <span className="npi-warning-text">
                                 BOM已换版，先复核再回复
                               </span>
                             )}
                           </td>
-                          <td data-label="项目 / 负责人">
-                            <span>{row.motorModel}</span>
-                            <small>
-                              {row.projectCode} · {row.ownerName}
-                            </small>
-                            {row.supplier && <small>{row.supplier}</small>}
+                          <td
+                            data-label="项目 / 负责人"
+                            title={`${row.projectCode} · ${row.motorModel} · ${row.ownerName} · ${row.supplier || ''}`}
+                          >
+                            {projectId
+                              ? row.ownerName
+                              : `${row.projectCode} · ${row.ownerName}`}
                           </td>
-                          <td data-label="要求 / 当前承诺">
-                            <span>要求 {row.requiredDate}</span>
-                            <small>
-                              当前 {row.currentCommittedDate || '待回复'}
-                            </small>
-                            {row.firstCommittedDate && (
-                              <small>首次 {row.firstCommittedDate}</small>
-                            )}
+                          <td
+                            data-label="要求日期"
+                            title={`当前 ${row.currentCommittedDate || '待回复'}；首次 ${row.firstCommittedDate || '待回复'}`}
+                          >
+                            {row.requiredDate}
                           </td>
                           <td
                             data-label={
@@ -727,6 +857,22 @@ export function NpiQuickReply({
                               type="date"
                               aria-label={`日期 ${row.bomReference?.materialCode || row.name} ${row.bomReference?.rowNo || ''}`}
                               value={date}
+                              title={
+                                changed
+                                  ? !validDate(date)
+                                    ? '请填写有效日期'
+                                    : mode === 'promise' &&
+                                        date > row.requiredDate
+                                      ? '晚于要求日期 · 待提交'
+                                      : '待提交'
+                                  : `当前承诺 ${row.currentCommittedDate || '未回复'}；首次 ${row.firstCommittedDate || '未回复'}`
+                              }
+                              aria-invalid={
+                                changed &&
+                                (!validDate(date) ||
+                                  (mode === 'complete' &&
+                                    date > (data?.today || '')))
+                              }
                               max={
                                 mode === 'complete' ? data?.today : undefined
                               }
@@ -734,12 +880,20 @@ export function NpiQuickReply({
                               onChange={(e) => edit(row, e.target.value)}
                               onKeyDown={(e) => {
                                 if (
+                                  (e.ctrlKey || e.metaKey) &&
+                                  e.key.toLowerCase() === 'd'
+                                ) {
+                                  e.preventDefault()
+                                  copyPrevious(row)
+                                  return
+                                }
+                                if (
                                   e.key === 'Enter' &&
                                   !e.ctrlKey &&
                                   !e.metaKey
                                 ) {
                                   e.preventDefault()
-                                  nextRow(row)
+                                  nextRow(row, e.shiftKey)
                                 }
                               }}
                               onPaste={(e) => {
@@ -747,27 +901,30 @@ export function NpiQuickReply({
                                 pasteDates(row, e.clipboardData.getData('text'))
                               }}
                             />
-                            {changed && (
-                              <small
-                                className={
-                                  !validDate(date) ||
-                                  (mode === 'complete' &&
-                                    date > (data?.today || ''))
-                                    ? 'npi-warning-text'
-                                    : 'npi-quick-dirty'
-                                }
-                              >
-                                {!validDate(date)
-                                  ? '请填写有效日期'
-                                  : mode === 'complete' &&
-                                      date > (data?.today || '')
-                                    ? '实际日期不能在未来'
-                                    : mode === 'promise' &&
-                                        date > row.requiredDate
-                                      ? '晚于要求日期'
-                                      : '待提交'}
-                              </small>
-                            )}
+                            {changed &&
+                              (!validDate(date) ||
+                                (mode === 'complete' &&
+                                  date > (data?.today || ''))) && (
+                                <small
+                                  className={
+                                    !validDate(date) ||
+                                    (mode === 'complete' &&
+                                      date > (data?.today || ''))
+                                      ? 'npi-warning-text'
+                                      : 'npi-quick-dirty'
+                                  }
+                                >
+                                  {!validDate(date)
+                                    ? '请填写有效日期'
+                                    : mode === 'complete' &&
+                                        date > (data?.today || '')
+                                      ? '实际日期不能在未来'
+                                      : mode === 'promise' &&
+                                          date > row.requiredDate
+                                        ? '晚于要求日期'
+                                        : '待提交'}
+                                </small>
+                              )}
                           </td>
                           <td data-label="原因">
                             {mode === 'promise' &&
@@ -871,9 +1028,9 @@ export function NpiQuickReply({
                 </div>
                 <span className="npi-quick-keyboard">
                   <CornerDownLeft size={14} />
-                  下一行 · Ctrl / ⌘ + Enter 提交
+                  Enter 下一行 · Shift + Enter 上一行
                   <br />
-                  支持粘贴一列日期，按列表顺序填入
+                  Ctrl / ⌘ + D 沿用日期 · Ctrl / ⌘ + Enter 提交
                 </span>
                 <button
                   className="npi-button secondary"
