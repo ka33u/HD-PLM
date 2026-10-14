@@ -26,6 +26,10 @@ import './quick-reply.css'
 type Item = QuickReplyItems['items'][number]
 type Draft = { date: string; reason: string; version: number; name: string }
 type Api = <T>(path: string, method?: string, data?: unknown) => Promise<T>
+const compareItems = (a: Item, b: Item) =>
+  a.projectCode.localeCompare(b.projectCode, 'zh-CN', { numeric: true }) ||
+  (a.bomReference?.rowNo || 0) - (b.bomReference?.rowNo || 0) ||
+  a.id.localeCompare(b.id)
 const canEdit = (r: Item) =>
   !r.actualCompleteDate &&
   r.currentNpiStage !== 'completed' &&
@@ -138,14 +142,7 @@ export function NpiQuickReply({
                     ? !!r.currentCommittedDate
                     : r.bomReference?.current === false)),
         )
-        .sort(
-          (a, b) =>
-            a.projectCode.localeCompare(b.projectCode, 'zh-CN', {
-              numeric: true,
-            }) ||
-            (a.bomReference?.rowNo || 0) - (b.bomReference?.rowNo || 0) ||
-            a.id.localeCompare(b.id),
-        ),
+        .sort(compareItems),
     [rows, project, query, filter, filter === 'drafts' ? drafts : null],
   )
   const page = usePagination(visible, pageSize, list)
@@ -176,6 +173,7 @@ export function NpiQuickReply({
           !initialized.current && scope
             ? result.items
                 .filter((r) => scope.has(r.id) && canEdit(r))
+                .sort(compareItems)
                 .slice(0, 50)
                 .map((r) => r.id)
             : [],

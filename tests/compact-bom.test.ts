@@ -152,6 +152,19 @@ try {
     await f.importBom(project2, 65)
     await p.goto(`${root}/npi?view=projects&project=${project2}&tab=bom`)
     await p.getByLabel('选择本页可分配任务', { exact: true }).check()
+    // Database response order is not guaranteed after updates or transfers.
+    await p.route(
+      '**/api/v1/npi/workbench/quick-replies?**',
+      async (route) => {
+        const response = await route.fetch()
+        const body = await response.json()
+        await route.fulfill({
+          response,
+          json: { ...body, items: [...body.items].reverse() },
+        })
+      },
+      { times: 1 },
+    )
     await p.getByLabel('生产完成时间快速回复', { exact: true }).click()
     const d = p.getByRole('dialog')
     await expect(d).toContainText('仅显示从 BOM 带入的 65 项')
