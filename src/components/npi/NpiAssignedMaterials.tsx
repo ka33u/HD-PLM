@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
@@ -124,7 +125,7 @@ export function NpiAssignedMaterials({
             [
               item.name,
               item.specification,
-              item.bomReference?.materialCode,
+              trackingMaterialCode(item),
               item.projectName,
               item.motorModel,
               item.projectCode,
@@ -303,7 +304,7 @@ export function NpiAssignedMaterials({
                               : '临时样机件'}{' '}
                       · {item.qty} {item.unit}
                     </div>
-                    <div>{item.bomReference?.materialCode}</div>
+                    <div>{trackingMaterialCode(item)}</div>
                     <small>
                       {item.motorModel} · {item.projectName} ·{' '}
                       {item.projectCode}

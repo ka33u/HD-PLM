@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { History } from 'lucide-react'
 import { eventGroups } from '../../lib/npi/event-labels'
@@ -40,7 +41,7 @@ export function NpiProjectHistory({
         (!q ||
           [
             item?.name,
-            item?.bomReference?.materialCode,
+            trackingMaterialCode(item),
             h.actorName,
             h.reason,
             h.oldCommittedDate,

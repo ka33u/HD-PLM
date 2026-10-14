@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useMemo, useRef, useState } from 'react'
 import { NpiPagination, usePagination } from './NpiPagination'
 import type { ReactNode } from 'react'
@@ -48,7 +49,7 @@ export function NpiDeliveryList({
                 : i.status === status)) &&
             [
               i.name,
-              i.bomReference?.materialCode,
+              trackingMaterialCode(i),
               i.specification,
               i.ownerName,
               i.projectCode,

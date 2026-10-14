@@ -19,7 +19,9 @@ export function NpiProjectOverview({
   api,
   onTab,
   onLocate,
+  onEdit,
 }: {
+  onEdit?: () => void
   project: ProjectDetail
   meta: NpiMetadata
   api: Api
@@ -121,6 +123,15 @@ export function NpiProjectOverview({
         <section className="npi-panel">
           <div className="npi-panel-title">
             <h2>项目信息</h2>
+            {onEdit && (
+              <button
+                className="npi-project-link"
+                onClick={onEdit}
+                aria-label="编辑概览项目信息"
+              >
+                编辑
+              </button>
+            )}
           </div>
           <dl className="npi-info-grid">
             {[

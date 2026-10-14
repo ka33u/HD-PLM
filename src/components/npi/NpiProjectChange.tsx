@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NpiMotorOrderFields } from './NpiMotorTypes'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { profileFields } from '../../lib/npi/project-profile'
 import {
   Dialog,
@@ -18,23 +18,26 @@ export function NpiProjectChange({
   meta,
   project,
   onChanged,
+  open,
+  onOpenChange,
 }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   api: Api
   meta: NpiMetadata
   project: ProjectDetail
   onChanged: (canContinue: boolean) => Promise<void>
 }) {
-  const [open, setOpen] = useState(false),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState('')
   const [preview, setPreview] = useState<NpiProjectChangePreview | null>(null)
   const [proposal, setProposal] = useState<Record<string, unknown>>({})
-  const edit = () => {
-    setOpen(true)
+  useEffect(() => {
+    if (!open) return
     setError('')
     setPreview(null)
     setProposal({})
-  }
+  }, [open])
   const review = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (busy) return
@@ -69,7 +72,7 @@ export function NpiProjectChange({
         'PATCH',
         { ...proposal, expectedSnapshot: preview.expectedSnapshot },
       )
-      setOpen(false)
+      onOpenChange(false)
       await onChanged(result.canContinue)
     } catch (failure) {
       setError(
@@ -83,21 +86,24 @@ export function NpiProjectChange({
     typeof proposal[key] === 'string' ? proposal[key] : fallback
   return (
     <>
-      <button className="npi-button secondary" onClick={edit}>
-        项目计划与交接
+      <button
+        className="npi-button secondary"
+        onClick={() => onOpenChange(true)}
+      >
+        编辑项目信息
       </button>
       <Dialog
         open={open}
         onOpenChange={(value) => {
-          if (!busy) setOpen(value)
+          if (!busy) onOpenChange(value)
         }}
       >
-        <DialogContent className="npi-modal" style={{ maxWidth: 760 }}>
+        <DialogContent className="npi-modal npi-project-edit-modal">
           <DialogTitle>
-            {preview ? '确认项目变更范围' : '调整项目计划与负责人'}
+            {preview ? '确认项目变更范围' : '编辑项目信息'}
           </DialogTitle>
           <DialogDescription>
-            先预览日期和工作交接清单，再确认保存。历史承诺与实际完成记录保留。
+            修改基本资料、计划日期或负责人，预览后保存。电机编码同步用于整机完成任务，历史承诺与实际完成记录保留。
           </DialogDescription>
           {error && (
             <div className="npi-error" role="alert">
@@ -134,116 +140,108 @@ export function NpiProjectChange({
                     maxLength={150}
                   />
                 </label>
-                <label>
-                  要求齐套日期
-                  <input
-                    name="requiredKitDate"
-                    type="date"
-                    defaultValue={fieldValue(
-                      'requiredKitDate',
-                      project.requiredKitDate,
-                    )}
-                    required
-                  />
-                </label>
-                <label>
-                  样机要求日期
-                  <input
-                    name="prototypeRequiredDate"
-                    type="date"
-                    defaultValue={fieldValue(
-                      'prototypeRequiredDate',
-                      project.prototypeRequiredDate,
-                    )}
-                    required
-                  />
-                </label>
-                {(['technical', 'manufacturing'] as const).map((role) => {
-                  const key = `${role}OwnerId` as const
-                  const selected = fieldValue(key, project[key])
-                  const options = meta.users.filter(
-                    (u) => u.role === role || u.id === selected,
-                  )
-                  return (
-                    <label key={role}>
-                      {role === 'technical' ? '技术负责人' : '制造负责人'}
-                      <select
-                        name={key}
-                        aria-label={
-                          role === 'technical' ? '技术负责人' : '制造负责人'
-                        }
-                        defaultValue={selected}
-                        required
-                      >
-                        {!options.some((u) => u.id === selected) && (
-                          <option value={selected}>
-                            原负责人已停用，请选择接任者
-                          </option>
+                {profileFields.map((field) => (
+                  <label
+                    key={field.key}
+                    className={field.kind === 'textarea' ? 'wide' : ''}
+                  >
+                    {field.label}
+                    {field.kind === 'textarea' ? (
+                      <textarea
+                        name={field.key}
+                        aria-label={field.label}
+                        defaultValue={fieldValue(
+                          field.key,
+                          project.profile[field.key],
                         )}
-                        {options.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name || u.email} · {u.email}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )
-                })}
+                        maxLength={field.max}
+                        rows={2}
+                      />
+                    ) : (
+                      <input
+                        name={field.key}
+                        aria-label={field.label}
+                        defaultValue={fieldValue(
+                          field.key,
+                          project.profile[field.key],
+                        )}
+                        maxLength={field.max}
+                        inputMode={
+                          field.kind === 'decimal'
+                            ? 'decimal'
+                            : field.kind === 'integer'
+                              ? 'numeric'
+                              : 'text'
+                        }
+                      />
+                    )}
+                  </label>
+                ))}
                 <details className="wide">
-                  <summary>客户与电机参数（可选）</summary>
+                  <summary>计划日期与负责人</summary>
                   <div className="npi-form-grid">
                     <label>
-                      项目编号 / 订单编号
+                      要求齐套日期
                       <input
-                        name="code"
-                        defaultValue={fieldValue('code', project.code)}
-                        maxLength={50}
+                        name="requiredKitDate"
+                        type="date"
+                        defaultValue={fieldValue(
+                          'requiredKitDate',
+                          project.requiredKitDate,
+                        )}
                         required
                       />
                     </label>
-                    {profileFields.map((field) => (
-                      <label
-                        key={field.key}
-                        className={field.kind === 'textarea' ? 'wide' : ''}
-                      >
-                        {field.label}
-                        {field.kind === 'textarea' ? (
-                          <textarea
-                            name={field.key}
-                            aria-label={field.label}
-                            defaultValue={fieldValue(
-                              field.key,
-                              project.profile[field.key],
-                            )}
-                            maxLength={field.max}
-                            rows={3}
-                          />
-                        ) : (
-                          <input
-                            name={field.key}
-                            aria-label={field.label}
-                            defaultValue={fieldValue(
-                              field.key,
-                              project.profile[field.key],
-                            )}
-                            maxLength={field.max}
-                            inputMode={
-                              field.kind === 'decimal'
-                                ? 'decimal'
-                                : field.kind === 'integer'
-                                  ? 'numeric'
-                                  : 'text'
-                            }
-                          />
+                    <label>
+                      样机要求日期
+                      <input
+                        name="prototypeRequiredDate"
+                        type="date"
+                        defaultValue={fieldValue(
+                          'prototypeRequiredDate',
+                          project.prototypeRequiredDate,
                         )}
-                      </label>
-                    ))}
+                        required
+                      />
+                    </label>
+                    {(['technical', 'manufacturing'] as const).map((role) => {
+                      const key = `${role}OwnerId` as const
+                      const selected = fieldValue(key, project[key])
+                      const options = meta.users.filter(
+                        (u) => u.role === role || u.id === selected,
+                      )
+                      return (
+                        <label key={role}>
+                          {role === 'technical' ? '技术负责人' : '制造负责人'}
+                          <select
+                            name={key}
+                            aria-label={
+                              role === 'technical' ? '技术负责人' : '制造负责人'
+                            }
+                            defaultValue={selected}
+                            required
+                          >
+                            {!options.some((u) => u.id === selected) && (
+                              <option value={selected}>
+                                原负责人已停用，请选择接任者
+                              </option>
+                            )}
+                            {options.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name || u.email} · {u.email}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )
+                    })}
                   </div>
                 </details>
                 <label className="wide">
                   变更原因
                   <textarea
                     name="reason"
+                    rows={2}
                     defaultValue={fieldValue('reason', '')}
                     required
                     maxLength={2000}
@@ -257,7 +255,7 @@ export function NpiProjectChange({
                 <button
                   type="button"
                   className="npi-button secondary"
-                  onClick={() => setOpen(false)}
+                  onClick={() => onOpenChange(false)}
                   disabled={busy}
                 >
                   取消
@@ -290,9 +288,17 @@ export function NpiProjectChange({
                       </>
                     )}
                     {t.qtyBefore !== t.qtyAfter && (
-                      <div>
+                      <>
                         订单台数：{t.qtyBefore} → {t.qtyAfter}
-                      </div>
+                        <br />
+                      </>
+                    )}
+                    {t.specificationBefore !== t.specificationAfter && (
+                      <>
+                        电机型号：{t.specificationBefore || '未填写'} →{' '}
+                        {t.specificationAfter}
+                        <br />
+                      </>
                     )}
                     {t.requiredBefore !== t.requiredAfter && (
                       <>
@@ -317,8 +323,7 @@ export function NpiProjectChange({
                   </p>
                 )}
                 <p>
-                  原生 PLM 项目成员权限仍由“项目成员”单独管理。本次清单调整 NPI
-                  业务职责及 NPI 访问权限。
+                  交接后，相关任务由新负责人办理，已有承诺和完成记录保留原操作人。
                 </p>
                 {!preview.canContinue && (
                   <p>交接后你将不再担任本项目负责人，保存后返回新品列表。</p>

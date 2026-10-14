@@ -51,7 +51,10 @@ import {
 } from '../ui/Dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs'
 import { profileFields } from '../../lib/npi/project-profile'
-import { trackingIdentity } from '../../lib/npi/tracking-reference'
+import {
+  trackingIdentity,
+  trackingMaterialCode,
+} from '../../lib/npi/tracking-reference'
 import { defaultTemplate } from '../../lib/npi/bom'
 import { stages } from '../../lib/npi/domain'
 import { NpiBomDrafts } from './NpiBomDrafts'
@@ -221,6 +224,15 @@ export function NpiWorkspace() {
   const bomRequest = useRef(0)
   const [bomLoading, setBomLoading] = useState<string | null>(null)
   const [externalOpen, setExternalOpen] = useState(false)
+  const [projectEditOpen, setProjectEditOpen] = useState(false)
+  const canEditProject = !!(
+    project &&
+    meta &&
+    project.currentNpiStage !== 'completed' &&
+    (['admin', 'supervisor'].includes(meta.actor.role) ||
+      (meta.actor.role === 'technical' &&
+        meta.actor.id === project.technicalOwnerId))
+  )
   const [modal, setModal] = useState<Modal | null>(null),
     [modalError, setModalError] = useState('')
   const [reconciliation, setReconciliation] =
@@ -1133,8 +1145,9 @@ export function NpiWorkspace() {
                   </span>
                 </div>
               </td>
-              <td data-label="物料编码" title={i.bomReference?.materialCode}>
-                {i.bomReference?.materialCode || '—'}
+              <td data-label="物料编码" title={trackingMaterialCode(i)}>
+                {trackingMaterialCode(i) ||
+                  (i.sourceType === 'WHOLE_MACHINE' ? '未填写电机编码' : '—')}
               </td>
               <td
                 data-label="数量"
@@ -1656,22 +1669,21 @@ export function NpiWorkspace() {
                     aria-label="项目管理"
                   >
                     <span>项目管理</span>{' '}
-                    {meta &&
-                      project.currentNpiStage !== 'completed' &&
-                      (['admin', 'supervisor'].includes(meta.actor.role) ||
-                        (meta.actor.role === 'technical' &&
-                          meta.actor.id === project.technicalOwnerId)) && (
-                        <NpiProjectChange
-                          api={api}
-                          meta={meta}
-                          project={project}
-                          onChanged={async (canContinue) => {
-                            if (!canContinue) navigate('dashboard')
-                            setNotice('项目变更已保存')
-                            await refresh()
-                          }}
-                        />
-                      )}
+                    {meta && canEditProject && (
+                      <NpiProjectChange
+                        key={project.id}
+                        open={projectEditOpen}
+                        onOpenChange={setProjectEditOpen}
+                        api={api}
+                        meta={meta}
+                        project={project}
+                        onChanged={async (canContinue) => {
+                          if (!canContinue) navigate('dashboard')
+                          setNotice('项目变更已保存')
+                          await refresh()
+                        }}
+                      />
+                    )}
                     {meta &&
                       (meta.actor.role === 'admin' ||
                         (meta.actor.role === 'technical' &&
@@ -1832,6 +1844,11 @@ export function NpiWorkspace() {
                         )
                       }}
                       onTab={changeProjectTab}
+                      onEdit={
+                        canEditProject
+                          ? () => setProjectEditOpen(true)
+                          : undefined
+                      }
                     />
                   )}
                 </TabsContent>
@@ -2725,6 +2742,13 @@ export function NpiWorkspace() {
             </DialogDescription>
             <dl className="npi-definition-list">
               {[
+                [
+                  '物料编码',
+                  trackingMaterialCode(taskDetails) ||
+                    (taskDetails.sourceType === 'WHOLE_MACHINE'
+                      ? '项目未填写电机编码'
+                      : '—'),
+                ],
                 ['来源', sourceNames[taskDetails.sourceType]],
                 ['规格', taskDetails.specification || '—'],
                 [

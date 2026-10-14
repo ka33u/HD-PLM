@@ -394,7 +394,7 @@ try {
         await expect(guide(tech)).toContainText(stage)
       await expect(guide(tech)).toContainText('协同验证-technical')
       await expect(
-        tech.getByRole('button', { name: '项目计划与交接', exact: true }),
+        tech.getByRole('button', { name: '编辑项目信息', exact: true }),
       ).toBeVisible()
 
       // A delayed cross-project response must not overwrite the project restored by Back.
@@ -445,7 +445,7 @@ try {
 
       // These dialogs own local form state and are not represented by Workspace's dialog booleans.
       for (const [button, value] of [
-        ['项目计划与交接', '保留的项目计划名称'],
+        ['编辑项目信息', '保留的项目计划名称'],
         ['以此项目新建', '保留的继承项目名称'],
       ]) {
         await tech.getByRole('button', { name: button!, exact: true }).click()
@@ -519,7 +519,7 @@ try {
       const supervisor = await pageFor('supervisor')
       await expect(guide(supervisor)).toBeVisible()
       await expect(
-        supervisor.getByRole('button', { name: '项目计划与交接', exact: true }),
+        supervisor.getByRole('button', { name: '编辑项目信息', exact: true }),
       ).toBeVisible()
       await expect(
         supervisor.getByRole('button', { name: /^推进阶段/ }),
@@ -588,7 +588,7 @@ try {
         0,
       )
       await expect(
-        tech.getByRole('button', { name: '项目计划与交接', exact: true }),
+        tech.getByRole('button', { name: '编辑项目信息', exact: true }),
       ).toHaveCount(0)
       await expect(guide(tech)).toContainText(/只读|归档|完成/)
       await tech.reload()

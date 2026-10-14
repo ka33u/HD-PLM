@@ -123,6 +123,7 @@ export async function projectWorkbench(
             name: record.name,
             code: record.code,
             motorModel: p.motorModel,
+            motorCode: profile.motorCode,
             motorType: profile.motorType,
             orderQuantity: profile.orderQuantity,
             currentNpiStage: p.currentNpiStage,
@@ -167,6 +168,8 @@ export async function projectWorkbench(
             )
             .map((r) => ({
               ...r.item,
+              motorCode:
+                r.item.sourceType === 'WHOLE_MACHINE' ? selected.motorCode : '',
               ownerName: r.ownerName || '未命名',
               status: itemStatus(r.item),
               currentNpiStage: selected.currentNpiStage,

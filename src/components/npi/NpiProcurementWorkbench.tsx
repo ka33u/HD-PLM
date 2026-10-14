@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useMemo, useRef, useState } from 'react'
 import {
   arrivalWindowDescription,
@@ -48,7 +49,7 @@ export function NpiProcurementWorkbench({
           (i) =>
             matches(i, filter, today) &&
             [
-              i.bomReference?.materialCode,
+              trackingMaterialCode(i),
               i.name,
               i.projectCode,
               i.projectName,

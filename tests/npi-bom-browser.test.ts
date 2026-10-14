@@ -402,7 +402,7 @@ try {
     tech.getByRole('region', { name: '项目概览', exact: true }),
   ).toContainText('协同机电')
   await tech
-    .getByRole('button', { name: '项目计划与交接', exact: true })
+    .getByRole('button', { name: '编辑项目信息', exact: true })
     .click()
   await tech.getByText('客户与电机参数（可选）', { exact: true }).click()
   await tech.getByLabel('额定功率（kW）', { exact: true }).fill('11.000')
@@ -982,7 +982,7 @@ try {
   await saved(tech)
   await tech.getByRole('button', { name: projectButton(handoffName) }).click()
   await tech
-    .getByRole('button', { name: '项目计划与交接', exact: true })
+    .getByRole('button', { name: '编辑项目信息', exact: true })
     .click()
   await tech.getByLabel('要求齐套日期', { exact: true }).fill('2026-10-16')
   await tech
@@ -1012,7 +1012,7 @@ try {
     .getByRole('button', { name: projectButton(handoffName) })
     .click()
   await expect(
-    incomingTech.getByRole('button', { name: '项目计划与交接', exact: true }),
+    incomingTech.getByRole('button', { name: '编辑项目信息', exact: true }),
   ).toBeVisible()
   await incomingTech
     .getByRole('tab', { name: '承诺与动态', exact: true })
@@ -1033,7 +1033,7 @@ try {
     incomingMfg.getByRole('button', { name: '集中回复', exact: true }),
   ).toBeVisible()
   await expect(
-    incomingMfg.getByRole('button', { name: '项目计划与交接', exact: true }),
+    incomingMfg.getByRole('button', { name: '编辑项目信息', exact: true }),
   ).toHaveCount(0)
   const supervisor = await pageFor('supervisor')
   await supervisor
@@ -1099,13 +1099,13 @@ try {
     supervisor.getByRole('heading', { name: new RegExp(name) }),
   ).toBeVisible()
   await expect(
-    supervisor.getByRole('button', { name: '项目计划与交接', exact: true }),
+    supervisor.getByRole('button', { name: '编辑项目信息', exact: true }),
   ).toHaveCount(0)
   // Finished projects stay locked even for plan-authorized supervisors.
   // The active project must still expose their plan-only entry.
   await openProjectDirectory(supervisor, handoffName)
   await expect(
-    supervisor.getByRole('button', { name: '项目计划与交接', exact: true }),
+    supervisor.getByRole('button', { name: '编辑项目信息', exact: true }),
   ).toBeVisible()
   console.log(
     'PASS: supervisor today changes/completions, change-count thresholds, historical inclusion, project drilldown and planning entry.',

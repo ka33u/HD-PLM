@@ -369,10 +369,12 @@ function projectSnapshot(
   changeCounts: Map<string, number>,
   issueRows: Array<ProjectIssueRow>,
   activeRowCount: number,
+  motorCode: string,
 ) {
   const items = rows.map(
     ({ item, ownerName, bomRow, bomVersionNo, bomImportId }) => ({
       ...item,
+      motorCode: item.sourceType === 'WHOLE_MACHINE' ? motorCode : '',
       bomReference:
         bomRow && bomVersionNo
           ? {
@@ -524,6 +526,7 @@ async function detailFor(tx: Tx | typeof db, p: Project) {
     changeCounts,
     issueRows,
     imports.find((i) => i.id === p.activeBomImportId)?.rowCount || 0,
+    readProjectProfile(program).motorCode,
   )
   return {
     ...p,
@@ -700,6 +703,7 @@ export async function dashboard(userId: string) {
             changeCounts,
             issuesByProject.get(p.programId) || [],
             imports.find((i) => i.id === p.activeBomImportId)?.rowCount || 0,
+            readProjectProfile(program).motorCode,
           ),
         }
       })
@@ -790,6 +794,7 @@ async function personalMaterials(
           projectName: projectRecords.name,
           motorModel: s.npiProjects.motorModel,
           projectCode: projectRecords.code,
+          projectAttributes: projectRecords.attributes,
           currentNpiStage: s.npiProjects.currentNpiStage,
           activeBomImportId: s.npiProjects.activeBomImportId,
           bomImportId: s.npiBomItems.importId,
@@ -854,6 +859,14 @@ async function personalMaterials(
           .filter((r) => r.item.trackingEnabled || r.item.affectsKit)
           .map((r) => ({
             ...r.item,
+            motorCode:
+              r.item.sourceType === 'WHOLE_MACHINE'
+                ? readProjectProfile({
+                    attributes: r.projectAttributes,
+                    customer: null,
+                    description: null,
+                  }).motorCode
+                : '',
             bomReference:
               r.bomRow && r.bomVersionNo
                 ? {
@@ -909,8 +922,15 @@ export async function trackingHistory(userId: string, id: string) {
       if (!item)
         throw new NpiError('TRACKING_ITEM_NOT_FOUND', '跟踪项不存在', 404)
       const [visibleProject] = await tx
-        .select({ deletedAt: s.npiProjects.deletedAt })
+        .select({
+          deletedAt: s.npiProjects.deletedAt,
+          attributes: projectRecords.attributes,
+        })
         .from(s.npiProjects)
+        .innerJoin(
+          projectRecords,
+          eq(projectRecords.id, s.npiProjects.programId),
+        )
         .where(eq(s.npiProjects.programId, item.programId))
       if (!visibleProject || visibleProject.deletedAt)
         throw new NpiError('PROGRAM_NOT_FOUND', '项目不存在或已移入回收站', 404)
@@ -1014,6 +1034,15 @@ export async function trackingHistory(userId: string, id: string) {
         item: {
           id: item.id,
           name: item.name,
+          sourceType: item.sourceType,
+          motorCode:
+            item.sourceType === 'WHOLE_MACHINE'
+              ? readProjectProfile({
+                  attributes: visibleProject.attributes,
+                  customer: null,
+                  description: null,
+                }).motorCode
+              : '',
           bomReference: bom
             ? {
                 materialCode: bom.row.materialCode,
@@ -2541,6 +2570,7 @@ export type NpiTracking = Track & {
   currentNpiStage?: string
   ownerName?: string
   motorModel?: string
+  motorCode?: string
   projectName?: string
   projectCode?: string
   bomReference?: TrackingBomReference | null

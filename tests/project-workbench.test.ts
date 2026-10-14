@@ -13,6 +13,7 @@ const fields = {
   motorType: '三相异步电动机',
   orderQuantity: '12',
   motorModel: 'YE5-250M-4',
+  motorCode: 'MOTOR-EDIT-001',
   technicalOwnerId: f.actors.technical!.id,
   manufacturingOwnerId: f.actors.manufacturing!.id,
   requiredKitDate: '2026-11-20',
@@ -92,6 +93,10 @@ try {
     )
     id = (await f.call('technical', '/projects', 'POST', fields, 201)).id
     const d = await f.importBom(id, 110)
+    assert.equal(
+      d.items.find((i: any) => i.sourceType === 'WHOLE_MACHINE').motorCode,
+      fields.motorCode,
+    )
     assert.equal(d.profile.motorType, fields.motorType)
     assert.equal(d.profile.orderQuantity, '12')
     assert.equal(
@@ -414,6 +419,7 @@ try {
     await d.getByLabel('电机类型', { exact: true }).selectOption('高效防爆电机')
     await d.getByLabel('订单台数', { exact: true }).fill('24')
     await d.getByLabel('电机型号', { exact: true }).fill('YBX-NEW')
+    await d.getByLabel('电机编码', { exact: true }).fill('MOTOR-UI-NEW')
     await d
       .getByLabel('技术负责人', { exact: true })
       .selectOption(f.actors.technical!.id)
@@ -429,6 +435,11 @@ try {
     assert(created)
     assert.equal(created.profile.orderQuantity, '24')
     assert.equal(created.profile.motorType, '高效防爆电机')
+    assert.equal(
+      created.items.find((i: any) => i.sourceType === 'WHOLE_MACHINE')
+        .motorCode,
+      'MOTOR-UI-NEW',
+    )
     await p.context().close()
     assert.deepEqual(errors, [])
   })
@@ -464,6 +475,208 @@ try {
     ).toBeVisible()
     await p.context().close()
     assert.deepEqual(errors, [])
+  })
+  await test('project editing saves one order code and all profile fields; whole-machine identity follows without losing promises', async () => {
+    const original = await f.detail(id)
+    const whole = original.items.find(
+      (i: any) => i.sourceType === 'WHOLE_MACHINE',
+    )
+    await f.call('manufacturing', `/tracking/${whole.id}/promise`, 'POST', {
+      expectedVersion: whole.version,
+      committedDate: '2026-11-18',
+      reason: '整机首轮回复',
+    })
+    const before = await f.detail(id)
+    const p = await page('technical')
+    await p.goto(`${root}/npi?view=projects&project=${id}&tab=history`)
+    await p.getByRole('button', { name: '编辑项目信息', exact: true }).click()
+    const d = p.getByRole('dialog')
+    await expect(d.locator('input[name=code]')).toHaveCount(1)
+    await expect(d.getByLabel('电机编码', { exact: true })).toHaveValue(
+      fields.motorCode,
+    )
+    await d
+      .getByLabel('项目编号 / 订单编号', { exact: true })
+      .fill('ORDER-EDIT-002')
+    await d.getByLabel('电机编码', { exact: true }).fill('MOTOR-EDIT-002')
+    await d
+      .getByLabel('电机类型', { exact: true })
+      .selectOption('永磁同步电动机')
+    await d.getByLabel('电机型号', { exact: true }).fill('TYC-NEW')
+    await d.getByLabel('订单台数', { exact: true }).fill('22')
+    await d.getByLabel('客户', { exact: true }).fill('资料编辑验证客户')
+    await d.getByLabel('用途 / 应用场景', { exact: true }).fill('风机驱动')
+    await d.getByLabel('额定功率（kW）', { exact: true }).fill('75')
+    await d.getByLabel('额定电压（V）', { exact: true }).fill('380')
+    await d.getByLabel('极数', { exact: true }).fill('4')
+    await d
+      .getByLabel('项目说明', { exact: true })
+      .fill('保留已有整机任务及承诺')
+    await d.getByLabel('变更原因', { exact: true }).fill('客户确认最终资料')
+    await d.getByText('计划日期与负责人', { exact: true }).click()
+    await expect(d.getByLabel('技术负责人', { exact: true })).toHaveValue(
+      f.actors.technical!.id,
+    )
+    await d.getByText('计划日期与负责人', { exact: true }).click()
+    await p.screenshot({
+      path: 'runtime/test-evidence/project-info-edit-desktop.png',
+    })
+    await d.getByRole('button', { name: '预览变更', exact: true }).click()
+    await expect(d.getByLabel('项目变更预览')).toContainText(
+      'MOTOR-EDIT-001 → MOTOR-EDIT-002',
+    )
+    await expect(d.getByLabel('项目变更预览')).toContainText('ORDER-EDIT-002')
+    await d.getByRole('button', { name: '返回修改', exact: true }).click()
+    await expect(d.getByLabel('电机编码', { exact: true })).toHaveValue(
+      'MOTOR-EDIT-002',
+    )
+    await expect(d.getByLabel('客户', { exact: true })).toHaveValue(
+      '资料编辑验证客户',
+    )
+    await d.getByRole('button', { name: '预览变更', exact: true }).click()
+    await d.getByRole('button', { name: '确认变更', exact: true }).click()
+    await expect(d).toHaveCount(0)
+    const after = await f.detail(id)
+    assert.equal(after.code, 'ORDER-EDIT-002')
+    assert.equal(after.motorModel, 'TYC-NEW')
+    assert.deepEqual(after.profile, {
+      motorType: '永磁同步电动机',
+      orderQuantity: '22',
+      motorCode: 'MOTOR-EDIT-002',
+      customer: '资料编辑验证客户',
+      application: '风机驱动',
+      ratedPowerKw: '75',
+      ratedVoltageV: '380',
+      poles: '4',
+      description: '保留已有整机任务及承诺',
+    })
+    assert.deepEqual(after.history, before.history)
+    assert.deepEqual(
+      after.items.filter((i: any) => i.sourceType === 'ERP_BOM'),
+      before.items.filter((i: any) => i.sourceType === 'ERP_BOM'),
+    )
+    const savedWhole = after.items.find((i: any) => i.id === whole.id)
+    assert.equal(savedWhole.motorCode, 'MOTOR-EDIT-002')
+    assert.equal(savedWhole.qty, '22')
+    assert.equal(savedWhole.specification, 'TYC-NEW')
+    assert.equal(savedWhole.firstCommittedDate, '2026-11-18')
+    assert.equal(savedWhole.currentCommittedDate, '2026-11-18')
+    assert.equal(savedWhole.bomReference, null)
+    const event = after.events.find((e: any) => e.action === 'PROJECT_CHANGED')
+    assert.equal(event.detail.reason, '客户确认最终资料')
+    assert.equal(event.detail.before.profile.motorCode, fields.motorCode)
+    assert.equal(event.detail.after.profile.motorCode, 'MOTOR-EDIT-002')
+    for (const path of [
+      '/workbench/materials',
+      '/workbench/quick-replies?kind=manufacturing',
+      `/workbench/projects?kind=manufacturing&projectId=${id}`,
+    ]) {
+      const data = await f.call('manufacturing', path)
+      assert.equal(
+        data.items.find((i: any) => i.id === whole.id).motorCode,
+        'MOTOR-EDIT-002',
+      )
+    }
+    const history = await f.call(
+      'manufacturing',
+      `/tracking/${whole.id}/history`,
+    )
+    assert.equal(history.item.motorCode, 'MOTOR-EDIT-002')
+    assert.equal(history.history.length, 1)
+    await p.getByRole('tab', { name: '概览', exact: true }).click()
+    await p
+      .getByRole('button', { name: '编辑概览项目信息', exact: true })
+      .click()
+    await expect(d.getByLabel('电机编码', { exact: true })).toHaveValue(
+      'MOTOR-EDIT-002',
+    )
+    await p.setViewportSize({ width: 390, height: 844 })
+    await expect(d).toBeVisible()
+    assert(
+      await p.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    )
+    await expect(
+      d.getByRole('button', { name: '预览变更', exact: true }),
+    ).toBeInViewport()
+    await p.screenshot({
+      path: 'runtime/test-evidence/project-info-edit-mobile.png',
+    })
+    await d.getByLabel('电机编码', { exact: true }).fill('DO-NOT-SAVE')
+    await d.getByRole('button', { name: '取消', exact: true }).click()
+    assert.equal((await f.detail(id)).profile.motorCode, 'MOTOR-EDIT-002')
+    await p.context().close()
+    const mfg = await page('manufacturing')
+    await mfg.goto(`${root}/npi?view=projects&project=${id}&tab=manufacturing`)
+    await expect(
+      mfg.getByRole('button', { name: '编辑项目信息', exact: true }),
+    ).toHaveCount(0)
+    await mfg.getByLabel('搜索交付任务', { exact: true }).fill('MOTOR-EDIT-002')
+    const row = mfg.locator(`[data-npi-item="${whole.id}"]`)
+    await expect(row).toContainText('MOTOR-EDIT-002')
+    await expect(mfg.locator('[data-npi-item]')).toHaveCount(1)
+    await row
+      .getByRole('button', { name: '查看整机完成任务详情', exact: true })
+      .click()
+    await expect(mfg.getByRole('dialog').locator('dd').first()).toHaveText(
+      'MOTOR-EDIT-002',
+    )
+    await mfg
+      .getByRole('dialog')
+      .getByRole('button', { name: '关闭弹窗', exact: true })
+      .click()
+    await mfg
+      .getByRole('button', { name: '快速回复完成时间', exact: true })
+      .click()
+    await mfg
+      .getByRole('dialog')
+      .getByLabel('快速回复状态', { exact: true })
+      .selectOption('all')
+    await mfg
+      .getByRole('dialog')
+      .getByLabel('搜索快速回复部件', { exact: true })
+      .fill('MOTOR-EDIT-002')
+    await expect(mfg.getByRole('dialog').locator('tbody tr')).toHaveCount(1)
+    await expect(mfg.getByRole('dialog').locator('tbody')).toContainText(
+      'MOTOR-EDIT-002',
+    )
+    await mfg.context().close()
+    assert.deepEqual(errors, [])
+  })
+  await test('project edit permissions and optimistic conflicts remain enforced', async () => {
+    const d = await f.detail(id)
+    const payload = {
+      motorCode: 'MOTOR-SUPERVISOR',
+      expectedVersion: d.version,
+      reason: '主管更正资料',
+    }
+    for (const role of ['manufacturing', 'procurement', 'peer']) {
+      await f.call(role, `/projects/${id}/change-preview`, 'POST', payload, 403)
+      await f.call(role, `/projects/${id}/plan`, 'PATCH', payload, 403)
+    }
+    const preview = await f.call(
+      'supervisor',
+      `/projects/${id}/change-preview`,
+      'POST',
+      payload,
+    )
+    await f.call('supervisor', `/projects/${id}/plan`, 'PATCH', {
+      ...payload,
+      expectedSnapshot: preview.expectedSnapshot,
+    })
+    await f.call(
+      'technical',
+      `/projects/${id}/plan`,
+      'PATCH',
+      {
+        ...payload,
+        motorCode: 'STALE',
+        expectedSnapshot: preview.expectedSnapshot,
+      },
+      409,
+    )
+    assert.equal((await f.detail(id)).profile.motorCode, 'MOTOR-SUPERVISOR')
   })
   await test('deleted projects disappear and stale BOM rows cannot be replied from workbenches', async () => {
     await f.importBom(id, 110, true)

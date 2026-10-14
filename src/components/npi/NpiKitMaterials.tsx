@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useRef, useState } from 'react'
 import { downloadKitMaterials } from './kit-export'
 import type { ReactNode } from 'react'
@@ -61,7 +62,7 @@ export function NpiKitMaterials({
             (status === 'risk_overdue' &&
               ['risk', 'overdue'].includes(i.status)) ||
             i.status === status) &&
-          `${i.bomReference?.materialCode || ''} ${i.name} ${i.specification} ${i.ownerName}`
+          `${trackingMaterialCode(i) || ''} ${i.name} ${i.specification} ${i.ownerName}`
             .toLowerCase()
             .includes(search.trim().toLowerCase()),
       )

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CalendarCheck,
@@ -126,7 +127,7 @@ export function NpiQuickReply({
               r.projectName,
               r.name,
               r.specification,
-              r.bomReference?.materialCode,
+              trackingMaterialCode(r),
               r.ownerName,
               r.supplier,
             ]
@@ -229,7 +230,7 @@ export function NpiQuickReply({
         version: previous[row.id]?.version ?? row.version,
         date,
         reason: rowReason ?? previous[row.id]?.reason ?? '',
-        name: `${row.bomReference?.materialCode || ''} ${row.name}`,
+        name: `${trackingMaterialCode(row) || ''} ${row.name}`,
       },
     }))
   }
@@ -258,7 +259,7 @@ export function NpiQuickReply({
           version: previous[row.id]?.version ?? row.version,
           date: useRequired ? row.requiredDate : batchDate,
           reason: previous[row.id]?.reason || '',
-          name: `${row.bomReference?.materialCode || ''} ${row.name}`,
+          name: `${trackingMaterialCode(row) || ''} ${row.name}`,
         }
       return next
     })
@@ -776,7 +777,7 @@ export function NpiQuickReply({
                           <td className="npi-quick-check">
                             <input
                               type="checkbox"
-                              aria-label={`选择 ${row.bomReference?.materialCode || row.name} ${row.bomReference?.rowNo || ''}`}
+                              aria-label={`选择 ${trackingMaterialCode(row) || row.name} ${row.bomReference?.rowNo || ''}`}
                               disabled={
                                 busy ||
                                 locked ||
@@ -814,7 +815,7 @@ export function NpiQuickReply({
                             <span className="npi-quick-part">
                               <strong>{row.name}</strong>
                               <span>
-                                {row.bomReference?.materialCode ||
+                                {trackingMaterialCode(row) ||
                                   (row.sourceType === 'WHOLE_MACHINE'
                                     ? '整机'
                                     : row.sourceType === 'TOOLING'
@@ -853,7 +854,7 @@ export function NpiQuickReply({
                                 else inputs.current.delete(row.id)
                               }}
                               type="date"
-                              aria-label={`日期 ${row.bomReference?.materialCode || row.name} ${row.bomReference?.rowNo || ''}`}
+                              aria-label={`日期 ${trackingMaterialCode(row) || row.name} ${row.bomReference?.rowNo || ''}`}
                               value={date}
                               title={
                                 changed
@@ -929,7 +930,7 @@ export function NpiQuickReply({
                             changed &&
                             row.currentCommittedDate ? (
                               <input
-                                aria-label={`原因 ${row.bomReference?.materialCode || row.name} ${row.bomReference?.rowNo || ''}`}
+                                aria-label={`原因 ${trackingMaterialCode(row) || row.name} ${row.bomReference?.rowNo || ''}`}
                                 value={draft?.reason || ''}
                                 placeholder={
                                   reason.trim()

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { trackingMaterialCode } from '../../lib/npi/tracking-reference'
 import { ownsWork } from '../../lib/npi/work-ownership'
 import { projectTitle } from '../../lib/npi/project-identity'
 import { useMemo, useRef, useState } from 'react'
@@ -261,7 +262,7 @@ export function NpiPreparationBoard({
           p.motorModel,
           i.name,
           i.ownerName,
-          i.bomReference?.materialCode,
+          trackingMaterialCode(i),
         ) &&
         (purchaseOwner === 'all' || purchaseOwner === i.ownerId) &&
         matchesArrivalWindow(i, dashboard.todayActivity.day, arrival) &&
@@ -357,7 +358,7 @@ export function NpiPreparationBoard({
                   <strong>{projectTitle(p)}</strong>
                   <span>{i.name}</span>
                   <small>
-                    {i.bomReference?.materialCode ||
+                    {trackingMaterialCode(i) ||
                       (i.sourceType === 'TOOLING' ? '工装' : 'BOM外零件')}
                   </small>
                 </td>

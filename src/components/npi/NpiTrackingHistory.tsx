@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from 'react'
-import { bomReferenceLabel } from '../../lib/npi/tracking-reference'
+import {
+  bomReferenceLabel,
+  trackingMaterialCode,
+} from '../../lib/npi/tracking-reference'
 import {
   Dialog,
   DialogContent,
@@ -59,11 +62,12 @@ export function NpiTrackingHistory({
           <p role="status">正在读取承诺历史…</p>
         ) : (
           <>
-            {data.item.bomReference && (
+            {trackingMaterialCode(data.item) && (
               <p style={{ overflowWrap: 'anywhere' }}>
-                物料编码：{data.item.bomReference.materialCode}
+                物料编码：{trackingMaterialCode(data.item)}
                 <br />
-                {bomReferenceLabel(data.item.bomReference)}
+                {data.item.bomReference &&
+                  bomReferenceLabel(data.item.bomReference)}
               </p>
             )}
             {data.bomChange && (

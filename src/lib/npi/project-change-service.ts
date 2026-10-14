@@ -121,8 +121,11 @@ async function prepare(
   const trackChanges = tracks.flatMap((track) => {
     let ownerId = track.ownerId,
       requiredDate = track.requiredDate,
-      qty = track.qty
+      qty = track.qty,
+      specification = track.specification
     if (track.sourceType === 'WHOLE_MACHINE') {
+      if (next.motorModel !== project.motorModel)
+        specification = next.motorModel
       if (
         profile.next.orderQuantity &&
         profile.next.orderQuantity !== profile.before.orderQuantity
@@ -154,9 +157,10 @@ async function prepare(
     }
     return ownerId === track.ownerId &&
       requiredDate === track.requiredDate &&
-      qty === track.qty
+      qty === track.qty &&
+      specification === track.specification
       ? []
-      : [{ track, ownerId, requiredDate, qty }]
+      : [{ track, ownerId, requiredDate, qty, specification }]
   })
   const issueChanges = issueRows.flatMap((r) => {
     const ownerId = r.ownerId ? transfers.get(r.ownerId) : undefined
@@ -240,16 +244,20 @@ async function prepare(
   const preview = {
     expectedSnapshot: snapshot,
     changes: fields,
-    tracking: trackChanges.map(({ track, ownerId, requiredDate, qty }) => ({
-      id: track.id,
-      name: track.name,
-      ownerBefore: names.get(track.ownerId) || track.ownerId,
-      ownerAfter: names.get(ownerId) || ownerId,
-      requiredBefore: track.requiredDate,
-      requiredAfter: requiredDate,
-      qtyBefore: track.qty,
-      qtyAfter: qty,
-    })),
+    tracking: trackChanges.map(
+      ({ track, ownerId, requiredDate, qty, specification }) => ({
+        id: track.id,
+        name: track.name,
+        ownerBefore: names.get(track.ownerId) || track.ownerId,
+        ownerAfter: names.get(ownerId) || ownerId,
+        requiredBefore: track.requiredDate,
+        requiredAfter: requiredDate,
+        qtyBefore: track.qty,
+        qtyAfter: qty,
+        specificationBefore: track.specification,
+        specificationAfter: specification,
+      }),
+    ),
     issues: issueChanges.map((r) => ({
       id: r.id,
       name: r.title || r.number,
@@ -336,10 +344,16 @@ export async function applyProjectChange(
       .where(eq(projectRecords.id, id))
     let planChanged = false
     for (const change of r.trackChanges) {
-      const { track, ownerId, requiredDate, qty } = change
+      const { track, ownerId, requiredDate, qty, specification } = change
       await tx
         .update(s.npiTrackingItems)
-        .set({ ownerId, requiredDate, qty, version: track.version + 1 })
+        .set({
+          ownerId,
+          requiredDate,
+          qty,
+          specification,
+          version: track.version + 1,
+        })
         .where(eq(s.npiTrackingItems.id, track.id))
       planChanged ||= !!track.manufacturingPlanId
       await event(tx, r.actor, id, track.id, 'TRACKING_PLAN_ADJUSTED', {
@@ -351,12 +365,14 @@ export async function applyProjectChange(
           ownerName: r.names.get(track.ownerId) || track.ownerId,
           requiredDate: track.requiredDate,
           qty: track.qty,
+          specification: track.specification,
         },
         after: {
           ownerId,
           ownerName: r.names.get(ownerId) || ownerId,
           requiredDate,
           qty,
+          specification,
         },
       })
     }
