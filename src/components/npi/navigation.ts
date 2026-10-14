@@ -24,12 +24,12 @@ export const moduleInfo = {
     label: '生产任务',
     title: '生产任务',
     description:
-      '逐项回复零部件、工装及整机的完成时间，支持连续填写和批量回复。',
+      '按项目查看电机 BOM，回复本人或本部门负责的零部件、工装及整机。',
   },
   purchasing: {
     label: '采购管理',
     title: '采购管理',
-    description: '查看采购物料交期、责任人和到货进展。',
+    description: '先选择项目，再查看采购 BOM 和到货进展。',
   },
   reports: {
     label: '报表看板',
@@ -39,7 +39,7 @@ export const moduleInfo = {
   data: {
     label: '基础数据',
     title: '基础数据',
-    description: '维护BOM导入模板，查看阶段和任务分配规则。',
+    description: '维护电机类型、BOM导入模板，查看阶段和任务分配规则。',
   },
   settings: {
     label: '系统设置',
@@ -48,9 +48,8 @@ export const moduleInfo = {
   },
   procurement: {
     label: '采购管理',
-    title: '我的采购任务',
-    description:
-      '处理本人及同部门采购件，批量回复交期、说明改期原因、确认到货。',
+    title: '采购管理',
+    description: '按项目查看本人及同部门采购件，批量回复交期、确认到货。',
   },
 } as const
 export type ModuleId = keyof typeof moduleInfo

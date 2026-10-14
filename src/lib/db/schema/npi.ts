@@ -50,6 +50,13 @@ export const npiProjects = pgTable('npi_projects', {
   version: integer('version').notNull().default(1),
   createdAt: created(),
 })
+export const npiMotorTypes = pgTable('npi_motor_types', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  enabled: boolean('enabled').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  createdAt: created(),
+})
 export const npiDepartments = pgTable('npi_departments', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 100 }).notNull().unique(),

@@ -821,6 +821,8 @@ test('Optional project profile normalizes numeric values, distinguishes clear/om
     0,
   )
   assert.deepEqual(readProjectProfile(), {
+    motorType: '',
+    orderQuantity: '',
     motorCode: '',
     customer: '',
     description: '',

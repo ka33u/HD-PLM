@@ -272,7 +272,7 @@ export function NpiProjectDashboard({
               maxLength={200}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索项目名称 / 型号 / 编号"
+              placeholder="搜索电机类型 / 型号 / 编号"
             />
           </label>
         </div>

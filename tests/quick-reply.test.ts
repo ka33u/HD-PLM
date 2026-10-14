@@ -510,8 +510,9 @@ try {
       const page = await context.newPage()
       page.on('pageerror', (e) => errors.push(e.message))
       await page.goto(root + '/npi?view=manufacturing')
+      await page.locator(`[data-workbench-project="${projectId}"]`).click()
       await page
-        .getByRole('button', { name: '完成时间快速回复', exact: true })
+        .getByRole('button', { name: '批量回复完成时间', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
       await dialog.getByLabel('每页显示', { exact: true }).selectOption('25')
@@ -683,8 +684,9 @@ try {
       const phone = await mobile.newPage()
       phone.on('pageerror', (e) => errors.push(e.message))
       await phone.goto(root + '/npi')
+      await phone.locator(`[data-workbench-project="${projectId}"]`).click()
       await phone
-        .getByRole('button', { name: '完成时间快速回复', exact: true })
+        .getByRole('button', { name: '批量回复完成时间', exact: true })
         .click()
       const d = phone.getByRole('dialog'),
         picks = d.locator('tbody input[type=checkbox]')
@@ -727,7 +729,9 @@ try {
       )
       await d.getByRole('button', { name: '关闭', exact: true }).click()
       await phone
-        .getByRole('button', { name: '改期', exact: true })
+        .locator('[data-bom-row]')
+        .filter({ hasText: '改期' })
+        .getByRole('button', { name: /^回复/ })
         .first()
         .click()
       await phone

@@ -768,6 +768,9 @@ try {
           .click()
         await page.getByRole('tab', { name: '交付任务', exact: true }).click()
         await page
+          .getByRole('button', { name: '查看整机完成任务详情', exact: true })
+          .click()
+        await page
           .getByRole('button', { name: '整机完成附件资料', exact: true })
           .click()
         await expect(
@@ -832,10 +835,14 @@ try {
           try {
             const staleBuyerPage = await staleBuyerContext.newPage()
             await staleBuyerPage.goto(root + '/npi')
+            await staleBuyerPage.locator('[data-workbench-project]').click()
+            await staleBuyerPage
+              .getByRole('button', { name: /^其他任务 \/ 待复核/ })
+              .click()
             const oldRow = staleBuyerPage.locator(
               `[data-npi-item="${trackingId}"]`,
             )
-            await expect(oldRow).toContainText('待BOM复核，请项目负责人处理')
+            await expect(oldRow).toContainText('待BOM复核')
             await expect(
               oldRow.getByRole('button', { name: /^(回复|改期|到货)$/ }),
             ).toHaveCount(0)
@@ -930,8 +937,9 @@ try {
       sharedPage.on('pageerror', (e) => errors.push(e.message))
       await sharedPage.goto(root + '/npi')
       await expect(
-        sharedPage.getByRole('heading', { name: '我的采购件', exact: true }),
+        sharedPage.getByRole('region', { name: '采购项目', exact: true }),
       ).toBeVisible()
+      await sharedPage.locator('[data-workbench-project]').click()
       const sharedTasks = (await call('sharedBuyer', '/workbench/procurement'))
         .items
       assert.equal(sharedTasks.length, 1)
@@ -951,11 +959,9 @@ try {
         sharedPage.locator(`[data-npi-item="${trackingId}"]`),
       ).toHaveCount(0)
       const currentRow = sharedPage.locator(
-        `[data-npi-item="${currentTask.id}"]`,
+        `[data-bom-row="${currentTask.bomItemId}"]`,
       )
-      await currentRow
-        .getByRole('button', { name: '回复', exact: true })
-        .click()
+      await currentRow.getByRole('button', { name: /^回复/ }).click()
       const replyDialog = sharedPage.getByRole('dialog')
       await replyDialog
         .getByLabel('预计到货日期', { exact: true })
@@ -965,11 +971,9 @@ try {
         .click()
       await expect(replyDialog).toHaveCount(0)
       await expect(
-        currentRow.getByRole('button', { name: '改期', exact: true }),
-      ).toBeVisible()
-      await currentRow
-        .getByRole('button', { name: '改期', exact: true })
-        .click()
+        currentRow.getByRole('button', { name: /^回复/ }),
+      ).toHaveText('改期')
+      await currentRow.getByRole('button', { name: /^回复/ }).click()
       await replyDialog
         .getByLabel('预计到货日期', { exact: true })
         .fill('2026-11-06')
@@ -996,8 +1000,11 @@ try {
           (entry) => entry.changedBy === actors.sharedBuyer!.id,
         ),
       )
+      await currentRow.getByRole('button', { name: /^查看/ }).click()
       await expect(
-        currentRow.getByRole('button', { name: '到货', exact: true }),
+        sharedPage
+          .getByRole('dialog')
+          .getByRole('button', { name: '确认到货', exact: true }),
       ).toBeVisible()
       await sharedContext.close()
       await adminContext.close()

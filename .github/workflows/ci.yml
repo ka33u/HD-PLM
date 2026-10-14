@@ -49,6 +49,7 @@ jobs:
       - run: npm run test:migration
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:project-workbench
       - run: npm run test:compact-bom
       - run: npm run test:browser
       - run: npm run test:accounts-browser

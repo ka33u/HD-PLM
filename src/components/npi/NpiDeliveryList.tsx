@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { NpiPagination, usePagination } from './NpiPagination'
 import type { ReactNode } from 'react'
 import type { NpiTracking } from '../../lib/npi/service'
@@ -20,10 +20,14 @@ export function NpiDeliveryList({
     [status, setStatus] = useState('unfinished'),
     [query, setQuery] = useState('')
   const start = useRef<HTMLDivElement>(null)
-  const active = items.filter(
-    (i) =>
-      (i.trackingEnabled || i.affectsKit) &&
-      !['MANUFACTURING', 'LEGACY_NODE'].includes(i.sourceType),
+  const active = useMemo(
+    () =>
+      items.filter(
+        (i) =>
+          (i.trackingEnabled || i.affectsKit) &&
+          !['MANUFACTURING', 'LEGACY_NODE'].includes(i.sourceType),
+      ),
+    [items],
   )
   const kinds = [
     ['all', '全部任务'],
@@ -32,41 +36,45 @@ export function NpiDeliveryList({
     ['TOOLING', '工装明细'],
     ['EXTERNAL', 'BOM外零件'],
   ]
-  const filtered = active
-    .filter(
-      (i) =>
-        (kind === 'all' || i.sourceType === kind) &&
-        (status === 'all' ||
-          (status === 'unfinished'
-            ? !i.actualCompleteDate
-            : i.status === status)) &&
-        [
-          i.name,
-          i.bomReference?.materialCode,
-          i.specification,
-          i.ownerName,
-          i.projectCode,
-          i.motorModel,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-    )
-    .sort(
-      (a, b) =>
-        Number(b.sourceType === 'WHOLE_MACHINE') -
-          Number(a.sourceType === 'WHOLE_MACHINE') ||
-        a.requiredDate.localeCompare(b.requiredDate) ||
-        a.name.localeCompare(b.name),
-    )
+  const filtered = useMemo(
+    () =>
+      active
+        .filter(
+          (i) =>
+            (kind === 'all' || i.sourceType === kind) &&
+            (status === 'all' ||
+              (status === 'unfinished'
+                ? !i.actualCompleteDate
+                : i.status === status)) &&
+            [
+              i.name,
+              i.bomReference?.materialCode,
+              i.specification,
+              i.ownerName,
+              i.projectCode,
+              i.motorModel,
+            ]
+              .join(' ')
+              .toLowerCase()
+              .includes(query.trim().toLowerCase()),
+        )
+        .sort(
+          (a, b) =>
+            Number(b.sourceType === 'WHOLE_MACHINE') -
+              Number(a.sourceType === 'WHOLE_MACHINE') ||
+            a.requiredDate.localeCompare(b.requiredDate) ||
+            a.name.localeCompare(b.name),
+        ),
+    [active, kind, status, query],
+  )
   const page = usePagination(filtered, 50, start)
   return (
-    <section className="npi-panel" aria-label={title}>
+    <section className="npi-panel npi-delivery-panel" aria-label={title}>
       <div className="npi-panel-title">
         <div>
           <h2>{title}</h2>
           <p>
-            直接回复每项预计完成时间，完成后单独确认实际日期。零部件默认由制造负责人办理，可转给采购。
+            点击名称查看详情、附件与计划；批量回复可统一填日期或粘贴日期列。
           </p>
         </div>
         <div className="npi-actions">

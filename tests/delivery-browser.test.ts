@@ -117,8 +117,9 @@ try {
     ] as const) {
       const p = pages[role]
       await p.goto(root + '/npi?view=' + role)
+      await p.locator(`[data-workbench-project="${id}"]`).click()
       await p
-        .getByRole('button', { name: '完成时间快速回复', exact: true })
+        .getByRole('button', { name: '批量回复完成时间', exact: true })
         .click()
       const d = p.getByRole('dialog')
       await expect(d.locator('tbody input[type=date]')).toHaveCount(count)

@@ -4,6 +4,7 @@ export type ProjectFilter =
 type DashboardProject = {
   id: string
   name: string
+  profile?: { motorType?: string }
   motorModel: string
   code: string
   manufacturingOwnerId: string
@@ -72,7 +73,9 @@ export function selectDashboardProjects<T extends DashboardProject>(
       (p) =>
         projectMatchesFilter(p, options.filter, options.day) &&
         (!options.exceptionsOnly || isExceptional(p)) &&
-        `${p.name} ${p.motorModel} ${p.code}`.toLowerCase().includes(search),
+        `${p.name} ${p.profile?.motorType || ''} ${p.motorModel} ${p.code}`
+          .toLowerCase()
+          .includes(search),
     )
     .sort(
       (a, b) =>

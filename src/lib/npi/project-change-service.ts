@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { validateMotorType } from './motor-types'
 import { createHash } from 'node:crypto'
 import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../db'
@@ -65,6 +66,9 @@ async function prepare(
     .for('update')
   if (!program) throw new Error('Missing project record')
   const profile = prepareProjectProfile(program, input)
+  await validateMotorType(tx, profile.next.motorType, profile.before.motorType)
+  if (profile.before.orderQuantity && !profile.next.orderQuantity)
+    throw new NpiError('VALIDATION_ERROR', '订单台数不能清空')
   const next = {
     code:
       input.code === undefined
@@ -116,8 +120,21 @@ async function prepare(
   }
   const trackChanges = tracks.flatMap((track) => {
     let ownerId = track.ownerId,
-      requiredDate = track.requiredDate
+      requiredDate = track.requiredDate,
+      qty = track.qty
     if (track.sourceType === 'WHOLE_MACHINE') {
+      if (
+        profile.next.orderQuantity &&
+        profile.next.orderQuantity !== profile.before.orderQuantity
+      ) {
+        if (track.actualCompleteDate)
+          throw new NpiError(
+            'INVALID_STATE_TRANSITION',
+            '整机已完成，不能修改订单台数',
+            409,
+          )
+        qty = profile.next.orderQuantity
+      }
       ownerId = manufacturing.id
       const previousDate =
         track.trackingType === 'assembly'
@@ -135,9 +152,11 @@ async function prepare(
     ) {
       ownerId = transfers.get(track.ownerId) ?? track.ownerId
     }
-    return ownerId === track.ownerId && requiredDate === track.requiredDate
+    return ownerId === track.ownerId &&
+      requiredDate === track.requiredDate &&
+      qty === track.qty
       ? []
-      : [{ track, ownerId, requiredDate }]
+      : [{ track, ownerId, requiredDate, qty }]
   })
   const issueChanges = issueRows.flatMap((r) => {
     const ownerId = r.ownerId ? transfers.get(r.ownerId) : undefined
@@ -221,13 +240,15 @@ async function prepare(
   const preview = {
     expectedSnapshot: snapshot,
     changes: fields,
-    tracking: trackChanges.map(({ track, ownerId, requiredDate }) => ({
+    tracking: trackChanges.map(({ track, ownerId, requiredDate, qty }) => ({
       id: track.id,
       name: track.name,
       ownerBefore: names.get(track.ownerId) || track.ownerId,
       ownerAfter: names.get(ownerId) || ownerId,
       requiredBefore: track.requiredDate,
       requiredAfter: requiredDate,
+      qtyBefore: track.qty,
+      qtyAfter: qty,
     })),
     issues: issueChanges.map((r) => ({
       id: r.id,
@@ -315,10 +336,10 @@ export async function applyProjectChange(
       .where(eq(projectRecords.id, id))
     let planChanged = false
     for (const change of r.trackChanges) {
-      const { track, ownerId, requiredDate } = change
+      const { track, ownerId, requiredDate, qty } = change
       await tx
         .update(s.npiTrackingItems)
-        .set({ ownerId, requiredDate, version: track.version + 1 })
+        .set({ ownerId, requiredDate, qty, version: track.version + 1 })
         .where(eq(s.npiTrackingItems.id, track.id))
       planChanged ||= !!track.manufacturingPlanId
       await event(tx, r.actor, id, track.id, 'TRACKING_PLAN_ADJUSTED', {
@@ -329,11 +350,13 @@ export async function applyProjectChange(
           ownerId: track.ownerId,
           ownerName: r.names.get(track.ownerId) || track.ownerId,
           requiredDate: track.requiredDate,
+          qty: track.qty,
         },
         after: {
           ownerId,
           ownerName: r.names.get(ownerId) || ownerId,
           requiredDate,
+          qty,
         },
       })
     }

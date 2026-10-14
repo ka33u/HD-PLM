@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { NpiMotorOrderFields } from './NpiMotorTypes'
 import { useState } from 'react'
 import { profileFields } from '../../lib/npi/project-profile'
 import {
@@ -115,15 +116,15 @@ export function NpiProjectChange({
                     required
                   />
                 </label>
-                <label>
-                  新品名称
-                  <input
-                    name="name"
-                    defaultValue={fieldValue('name', project.name)}
-                    required
-                    maxLength={200}
-                  />
-                </label>
+                <NpiMotorOrderFields
+                  meta={meta}
+                  motorType={fieldValue('motorType', project.profile.motorType)}
+                  orderQuantity={fieldValue(
+                    'orderQuantity',
+                    project.profile.orderQuantity,
+                  )}
+                  legacy={!project.profile.motorType}
+                />
                 <label>
                   电机型号
                   <input
@@ -287,6 +288,11 @@ export function NpiProjectChange({
                         责任人：{t.ownerBefore} → {t.ownerAfter}
                         <br />
                       </>
+                    )}
+                    {t.qtyBefore !== t.qtyAfter && (
+                      <div>
+                        订单台数：{t.qtyBefore} → {t.qtyAfter}
+                      </div>
                     )}
                     {t.requiredBefore !== t.requiredAfter && (
                       <>

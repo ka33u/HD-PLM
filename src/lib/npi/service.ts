@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { listMotorTypes, validateMotorType } from './motor-types'
 import { ensureBomDeliveryTasks } from './delivery-tasks'
 import { carryUnchangedTracking } from './bom-carry'
 import { ownsWork } from './work-ownership'
@@ -190,7 +191,13 @@ export async function owner(tx: Tx, id: unknown, accepted: Array<Role>) {
 export async function metadata(userId: string) {
   const actor = await getActor(userId)
   if (actor.role === 'procurement')
-    return { actor, users: [], templates: [], recentProcurementOwnerId: null }
+    return {
+      actor,
+      users: [],
+      templates: [],
+      motorTypes: [],
+      recentProcurementOwnerId: null,
+    }
   const people = await db
     .select({
       id: users.id,
@@ -230,6 +237,7 @@ export async function metadata(userId: string) {
   return {
     actor,
     recentProcurementOwnerId: recent?.ownerId || null,
+    motorTypes: await listMotorTypes(),
     users: people,
     templates: await db
       .select({
@@ -257,7 +265,7 @@ export async function createProjectInTransaction(
   if (!['technical', 'admin'].includes(actor.role)) return denied()
   const tech = await owner(tx, input.technicalOwnerId, ['technical'])
   const mfg = await owner(tx, input.manufacturingOwnerId, ['manufacturing'])
-  const name = textValue(input.name, '名称', 200),
+  const name = textValue(input.motorType ?? input.name, '电机类型', 200),
     model = textValue(input.motorModel, '电机型号', 150)
   const code = input.code
     ? textValue(input.code, '项目编号', 50)
@@ -280,8 +288,12 @@ export async function createProjectInTransaction(
     throw new NpiError('DUPLICATE_PROJECT_CODE', '项目编号已存在', 409)
   const profile = prepareProjectProfile(
     { customer: null, description: null, attributes: { npi: true } },
-    input,
+    { ...input, orderQuantity: input.orderQuantity ?? '1' },
   )
+  if (!profile.next.orderQuantity)
+    throw new NpiError('VALIDATION_ERROR', '请填写订单台数')
+  if (input.motorType !== undefined)
+    await validateMotorType(tx, profile.next.motorType)
   const [p] = await tx
     .insert(projectRecords)
     .values({
@@ -315,7 +327,7 @@ export async function createProjectInTransaction(
     trackingType: 'assembly',
     name: '整机完成',
     specification: model,
-    qty: '1',
+    qty: profile.next.orderQuantity,
     unit: '台',
     ownerId: mfg.id,
     requiredDate: prototypeRequiredDate,
@@ -573,6 +585,9 @@ export async function dashboard(userId: string) {
               id: projectRecords.id,
               name: projectRecords.name,
               code: projectRecords.code,
+              customer: projectRecords.customer,
+              description: projectRecords.description,
+              attributes: projectRecords.attributes,
             })
             .from(projectRecords)
             .where(inArray(projectRecords.id, ids))
@@ -677,6 +692,7 @@ export async function dashboard(userId: string) {
           id: p.programId,
           name: program?.name || '',
           code: program?.code || '',
+          profile: readProjectProfile(program),
           imports,
           ...projectSnapshot(
             p,

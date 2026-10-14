@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NpiError, textValue } from './domain'
 
+export const orderFields = [
+  { key: 'motorType', label: '电机类型', max: 100, kind: 'text' },
+  { key: 'orderQuantity', label: '订单台数', max: 6, kind: 'integer' },
+] as const
 export const profileFields = [
   { key: 'motorCode', label: '电机编码', max: 100, kind: 'text' },
   { key: 'customer', label: '客户', max: 200, kind: 'text' },
@@ -10,7 +14,8 @@ export const profileFields = [
   { key: 'poles', label: '极数', max: 6, kind: 'integer' },
   { key: 'description', label: '项目说明', max: 4000, kind: 'textarea' },
 ] as const
-export type ProfileKey = (typeof profileFields)[number]['key']
+const allFields = [...orderFields, ...profileFields]
+export type ProfileKey = (typeof allFields)[number]['key']
 export type ProjectProfile = Record<ProfileKey, string>
 type StoredProfile = {
   customer: string | null
@@ -30,6 +35,8 @@ const display = (value: unknown) =>
 export function readProjectProfile(program?: StoredProfile): ProjectProfile {
   const motor = record(record(program?.attributes).npiMotorSpec)
   return {
+    motorType: display(motor.motorType),
+    orderQuantity: display(motor.orderQuantity),
     motorCode: display(motor.motorCode),
     customer: program?.customer || '',
     description: program?.description || '',
@@ -39,7 +46,7 @@ export function readProjectProfile(program?: StoredProfile): ProjectProfile {
     poles: display(motor.poles),
   }
 }
-function parse(value: unknown, field: (typeof profileFields)[number]) {
+function parse(value: unknown, field: (typeof allFields)[number]) {
   if (value == null || (typeof value === 'string' && !value.trim())) return ''
   if (field.kind === 'decimal' || field.kind === 'integer') {
     if (!['string', 'number'].includes(typeof value))
@@ -75,7 +82,7 @@ export function prepareProjectProfile(
     after: string
   }> = []
   const patch: Partial<StoredProfile> = {}
-  for (const field of profileFields) {
+  for (const field of allFields) {
     if (input[field.key] === undefined) continue
     const value = parse(input[field.key], field)
     next[field.key] = value

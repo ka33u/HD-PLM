@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { validateMotorType } from './motor-types'
 import { ensureBomDeliveryTasks } from './delivery-tasks'
 import { createHash } from 'node:crypto'
 import { and, asc, eq } from 'drizzle-orm'
@@ -56,10 +57,17 @@ async function prepare(
   const manufacturing = await owner(tx, input.manufacturingOwnerId, [
     'manufacturing',
   ])
-  const profile = prepareProjectProfile(program, input).next
+  const profile = prepareProjectProfile(program, {
+    ...input,
+    orderQuantity: input.orderQuantity ?? '1',
+  }).next
+  if (input.motorType !== undefined)
+    await validateMotorType(tx, profile.motorType)
+  if (!profile.orderQuantity)
+    throw new NpiError('VALIDATION_ERROR', '请填写订单台数')
   const target = {
     code: textValue(input.code, '新项目编号', 50),
-    name: textValue(input.name, '新项目名称', 200),
+    name: textValue(input.motorType ?? input.name, '电机类型', 200),
     motorModel: textValue(input.motorModel, '电机型号', 150),
     technicalOwnerId: technical.id,
     manufacturingOwnerId: manufacturing.id,
@@ -69,6 +77,7 @@ async function prepare(
       '样机要求日期',
     )!,
     ...profile,
+    ...(profile.motorType ? {} : { motorType: undefined }),
   }
   if (target.requiredKitDate > target.prototypeRequiredDate)
     throw new NpiError('VALIDATION_ERROR', '要求齐套日期不得晚于样机要求日期')

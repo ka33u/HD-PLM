@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { NpiMotorOrderFields } from './NpiMotorTypes'
 import { projectTitle } from '../../lib/npi/project-identity'
 import { requestId as createRequestId } from '../../lib/request-id'
 import { useState } from 'react'
-import { profileFields } from '../../lib/npi/project-profile'
+import { orderFields, profileFields } from '../../lib/npi/project-profile'
 import {
   Dialog,
   DialogContent,
@@ -151,19 +152,18 @@ export function NpiProjectInheritance({
           {!preview ? (
             <form onSubmit={(e) => void review(e)}>
               <div className="npi-form-grid">
-                <label>
-                  新品名称
-                  <input
-                    name="name"
-                    aria-label="新品名称"
-                    maxLength={200}
-                    required
-                    defaultValue={value(
-                      'name',
-                      project.name.slice(0, 190) + '（新项目）',
-                    )}
-                  />
-                </label>
+                <NpiMotorOrderFields
+                  meta={meta}
+                  motorType={value(
+                    'motorType',
+                    meta.motorTypes.some(
+                      (t) => t.enabled && t.name === project.profile.motorType,
+                    )
+                      ? project.profile.motorType
+                      : '',
+                  )}
+                  orderQuantity={value('orderQuantity', '1')}
+                />
                 <label>
                   电机型号
                   <input
@@ -327,7 +327,7 @@ export function NpiProjectInheritance({
               </p>
               <details>
                 <summary>查看新项目参数</summary>
-                {profileFields.map((f) => (
+                {[...orderFields, ...profileFields].map((f) => (
                   <p key={f.key}>
                     {f.label}：{preview.target[f.key] || '未填写'}
                   </p>

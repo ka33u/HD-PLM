@@ -305,11 +305,12 @@ try {
       role: 'manufacturing' | 'procurement',
     ) {
       await page.goto(`${root}/npi?view=${role}`)
+      await page.locator(`[data-workbench-project="${projectId}"]`).click()
       await page
-        .getByRole('button', { name: '完成时间快速回复', exact: true })
+        .getByRole('button', { name: '批量回复完成时间', exact: true })
         .click()
       const dialog = page.getByRole('dialog')
-      await dialog.getByLabel('快速回复项目').selectOption(projectId)
+      await expect(dialog.getByLabel('快速回复项目')).toHaveCount(0)
       const dates = dialog.locator('tbody input[type=date]')
       const count = role === 'manufacturing' ? 3 : 1
       await expect(dates).toHaveCount(count)
@@ -449,11 +450,11 @@ try {
       ]) {
         await tech.getByRole('button', { name: button!, exact: true }).click()
         const dialog = tech.getByRole('dialog')
-        await dialog.getByLabel('新品名称', { exact: true }).fill(value!)
+        await dialog.getByLabel('电机型号', { exact: true }).fill(value!)
         await tech.goBack()
         await expectTab(tech, 'overview', '概览')
         await expect(
-          dialog.getByLabel('新品名称', { exact: true }),
+          dialog.getByLabel('电机型号', { exact: true }),
         ).toHaveValue(value!)
         await expect(tech.locator('.npi-navigation-notice')).toBeVisible()
         await dialog.getByRole('button', { name: '取消', exact: true }).click()
@@ -553,7 +554,12 @@ try {
         'manufacturing',
         projectUrl('manufacturing', 'manufacturing'),
       )
-      await expectTab(mfg, 'manufacturing', '交付任务')
+      await expect(
+        mfg.getByRole('region', { name: '项目任务工作页' }),
+      ).toBeVisible()
+      await expect(
+        mfg.getByRole('table', { name: '完整BOM明细' }),
+      ).toBeVisible()
       await replyAndCompletePart(buyer, 'procurement')
       await replyAndCompletePart(mfg, 'manufacturing')
       await tech.reload()

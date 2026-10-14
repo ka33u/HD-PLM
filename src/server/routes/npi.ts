@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { projectWorkbench } from '../../lib/npi/project-workbench'
+import { saveMotorType } from '../../lib/npi/motor-types'
 import {
   listDepartments,
   saveDepartment,
@@ -188,6 +190,9 @@ app.post('/projects/:id/trash', async (c) =>
     ),
   ),
 )
+app.post('/motor-types', async (c) =>
+  c.json(await saveMotorType(c.get('userId'), await c.req.json())),
+)
 app.get('/departments', async (c) =>
   c.json(await listDepartments(c.get('userId'))),
 )
@@ -287,6 +292,15 @@ app.post('/projects/:id/external-items', async (c) =>
 )
 app.get('/tracking/:id/history', async (c) =>
   c.json(await npi.trackingHistory(c.get('userId'), c.req.param('id'))),
+)
+app.get('/workbench/projects', async (c) =>
+  c.json(
+    await projectWorkbench(
+      c.get('userId'),
+      c.req.query('kind') || '',
+      c.req.query('projectId'),
+    ),
+  ),
 )
 app.get('/workbench/quick-replies', async (c) =>
   c.json(await npi.quickReplyItems(c.get('userId'), c.req.query())),

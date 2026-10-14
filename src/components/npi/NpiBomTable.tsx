@@ -22,7 +22,11 @@ export function NpiBomTable({
   onDetails,
   onReply,
   canReply,
+  selectionLabel = '选择本页可分配任务',
+  missingTaskLabel = '待复核',
 }: {
+  selectionLabel?: string
+  missingTaskLabel?: string
   rows: BomRow[]
   tasks: Map<string | null, NpiTracking>
   parents: Set<string | null>
@@ -53,7 +57,7 @@ export function NpiBomTable({
           <th>
             <input
               type="checkbox"
-              aria-label="选择本页可分配任务"
+              aria-label={selectionLabel}
               disabled={!eligible.length}
               checked={all}
               ref={(node) => {
@@ -147,8 +151,8 @@ export function NpiBomTable({
               <td title={`${r.qty} ${r.unit}`}>
                 {r.qty} {r.unit}
               </td>
-              <td title={t?.ownerName || '待复核'}>
-                {t?.ownerName || '待复核'}
+              <td title={t?.ownerName || missingTaskLabel}>
+                {t?.ownerName || missingTaskLabel}
               </td>
               <td
                 title={`要求 ${t?.requiredDate || '—'}；首次 ${t?.firstCommittedDate || '未回复'}；实际 ${t?.actualCompleteDate || '未完成'}`}
@@ -159,7 +163,7 @@ export function NpiBomTable({
                 <span
                   className={`npi-bom-status ${t?.status || 'pending_reply'}`}
                 >
-                  {t ? states[t.status] || t.status : '待复核'}
+                  {t ? states[t.status] || t.status : missingTaskLabel}
                 </span>
               </td>
               <td>

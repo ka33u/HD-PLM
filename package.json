@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -34,7 +34,8 @@
     "test:preparation-board": "node --import tsx --test tests/preparation-board.test.ts",
     "test:workflow-navigation": "node --import tsx --test tests/workflow-navigation.test.ts",
     "test:delivery": "node --import tsx --test tests/delivery.test.ts tests/delivery-migration.test.ts",
-    "test:compact-bom": "node --import tsx --test tests/compact-bom.test.ts"
+    "test:compact-bom": "node --import tsx --test tests/compact-bom.test.ts",
+    "test:project-workbench": "node --import tsx --test tests/project-workbench.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",

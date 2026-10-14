@@ -60,7 +60,13 @@ export function NpiProjectLibrary({
       dashboard.projects
         .filter(
           (p) =>
-            contains(query, p.name, p.code, p.motorModel) &&
+            contains(
+              query,
+              p.name,
+              p.profile?.motorType,
+              p.code,
+              p.motorModel,
+            ) &&
             (stage === 'all' || p.currentNpiStage === stage) &&
             (mode !== 'bom' ||
               bomState === 'all' ||
@@ -91,7 +97,7 @@ export function NpiProjectLibrary({
           <input
             type="search"
             aria-label="模块项目搜索"
-            placeholder="项目名称 / 编号 / 型号"
+            placeholder="电机类型 / 编号 / 型号"
             value={query}
             maxLength={200}
             onChange={(e) => setQuery(e.target.value)}
@@ -397,7 +403,7 @@ export function NpiReports({
   const searched = useMemo(
     () =>
       dashboard.projects.filter((p) =>
-        contains(query, p.name, p.code, p.motorModel),
+        contains(query, p.name, p.profile?.motorType, p.code, p.motorModel),
       ),
     [dashboard, query],
   )
@@ -438,7 +444,7 @@ export function NpiReports({
             <input
               aria-label="报表项目搜索"
               type="search"
-              placeholder="项目名称 / 编号 / 型号"
+              placeholder="电机类型 / 编号 / 型号"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               maxLength={200}

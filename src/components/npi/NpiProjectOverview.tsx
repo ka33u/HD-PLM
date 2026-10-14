@@ -126,6 +126,16 @@ export function NpiProjectOverview({
             {[
               ['项目编号', project.code],
               ['电机型号', project.motorModel],
+              ['电机类型', project.profile.motorType || '未分类'],
+              [
+                '订单台数',
+                project.profile.orderQuantity
+                  ? `${project.profile.orderQuantity} 台`
+                  : '未填写',
+              ],
+              ...(!project.profile.motorType
+                ? [['历史名称', project.name]]
+                : []),
               ['电机编码', project.profile.motorCode || '未填写'],
               ['客户', project.profile.customer || '未填写'],
               ['用途 / 应用场景', project.profile.application || '未填写'],

@@ -36,11 +36,13 @@ export function NpiIssues({
   api,
   meta,
   project,
+  scopeProjectId,
   onChanged,
 }: {
   api: Api
   meta: NpiMetadata
   project?: ProjectDetail
+  scopeProjectId?: string
   onChanged: () => Promise<void>
 }) {
   const [list, setList] = useState<Array<NpiIssue>>([])
@@ -80,7 +82,12 @@ export function NpiIssues({
       const next = await api<Array<NpiIssue>>(
         projectId ? `/projects/${projectId}/issues` : '/workbench/issues',
       )
-      if (revision === listRevision.current) setList(next)
+      if (revision === listRevision.current)
+        setList(
+          scopeProjectId
+            ? next.filter((i) => i.programId === scopeProjectId)
+            : next,
+        )
     } catch (e) {
       if (revision === listRevision.current)
         setLoadError(e instanceof Error ? e.message : '读取问题列表失败')
@@ -88,7 +95,7 @@ export function NpiIssues({
     } finally {
       if (revision === listRevision.current) setLoading(false)
     }
-  }, [api, projectId])
+  }, [api, projectId, scopeProjectId])
   useEffect(() => {
     generation.current++
     setList([])

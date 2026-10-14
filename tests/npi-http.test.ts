@@ -2319,6 +2319,8 @@ try {
       path = `/projects/${p.id}`
     const original = await call('technical', path)
     assert.deepEqual(original.profile, {
+      motorType: '',
+      orderQuantity: '1',
       motorCode: '',
       customer: '协同机电',
       application: '轴流风机',
@@ -2409,6 +2411,7 @@ try {
       npi: true,
       externalPlugin: { keep: true },
       npiMotorSpec: {
+        orderQuantity: '1',
         application: '轴流风机',
         ratedPowerKw: '11',
         ratedVoltageV: '380',

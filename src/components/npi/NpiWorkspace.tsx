@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { NpiProjectWorkbench } from './NpiProjectWorkbench'
 import { ownsWork } from '../../lib/npi/work-ownership'
 import { NpiDeliveryList } from './NpiDeliveryList'
-import { NpiAssignedMaterials } from './NpiAssignedMaterials'
 import { NpiStageGuide } from './NpiStageGuide'
 import {
   readWorkspaceLocation,
@@ -34,7 +34,6 @@ import {
   Factory,
   FileSpreadsheet,
   FolderKanban,
-  History,
   LayoutDashboard,
   Plus,
   RefreshCw,
@@ -52,10 +51,7 @@ import {
 } from '../ui/Dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs'
 import { profileFields } from '../../lib/npi/project-profile'
-import {
-  bomReferenceLabel,
-  trackingIdentity,
-} from '../../lib/npi/tracking-reference'
+import { trackingIdentity } from '../../lib/npi/tracking-reference'
 import { defaultTemplate } from '../../lib/npi/bom'
 import { stages } from '../../lib/npi/domain'
 import { NpiBomDrafts } from './NpiBomDrafts'
@@ -68,14 +64,9 @@ import { NpiFiles } from './NpiFiles'
 import { useNpiFileOperation } from './useNpiFileOperation'
 import { NpiSettings } from './NpiSettings'
 import { moduleInfo, navigationFor } from './navigation'
-import {
-  NpiPreparationBoard,
-  NpiProjectLibrary,
-  NpiReports,
-} from './NpiModuleViews'
-import { NpiProjectOverview, dateGap } from './NpiProjectOverview'
+import { NpiProjectLibrary, NpiReports } from './NpiModuleViews'
+import { NpiProjectOverview } from './NpiProjectOverview'
 import { NpiKitMaterials } from './NpiKitMaterials'
-import { NpiProcurementWorkbench } from './NpiProcurementWorkbench'
 import { NpiProcurementReplyDialog } from './NpiProcurementReplyDialog'
 import { NpiTrackingHistory } from './NpiTrackingHistory'
 import { NpiExternalMaterial } from './NpiExternalMaterial'
@@ -99,6 +90,7 @@ import type { BomDifference, BomPreview, BomRow } from '../../lib/npi/bom'
 import type { FormEvent, ReactNode } from 'react'
 import './npi.css'
 import './compact-bom.css'
+import './project-workbench.css'
 
 const moduleIcons = {
   trash: Trash2,
@@ -150,6 +142,9 @@ type Field = {
   options?: Array<{ value: string; label: string }>
   required?: boolean
   maxLength?: number
+  min?: number
+  max?: number
+  step?: number
   inputMode?: 'text' | 'decimal' | 'numeric'
 }
 type Modal = {
@@ -197,8 +192,7 @@ export function NpiWorkspace() {
 
   const [meta, setMeta] = useState<NpiMetadata | null>(null),
     [dashboard, setDashboard] = useState<NpiDashboard | null>(null)
-  const [purchases, setPurchases] = useState<Array<NpiTracking>>([]),
-    [project, setProject] = useState<ProjectDetail | null>(null)
+  const [project, setProject] = useState<ProjectDetail | null>(null)
   const [view, setView] = useState<ModuleId | 'project'>(
       () => locationModule() || 'dashboard',
     ),
@@ -252,6 +246,11 @@ export function NpiWorkspace() {
     item: NpiTracking
     complete: boolean
   } | null>(null)
+  const [workbenchProjectId, setWorkbenchProjectId] = useState<string | null>(
+    null,
+  )
+  const [workbenchRevision, setWorkbenchRevision] = useState(0)
+  const [taskDetails, setTaskDetails] = useState<NpiTracking | null>(null)
   const [fileItem, setFileItem] = useState<NpiTracking | null>(null)
   const fileOperation = useNpiFileOperation(fileItem?.id || null)
   const [historyItem, setHistoryItem] = useState<NpiTracking | null>(null),
@@ -408,14 +407,9 @@ export function NpiWorkspace() {
         }
         setMeta(next)
         const loadProjects = !configurationOnly || next.actor.role !== 'admin'
-        if (next.actor.role === 'procurement') {
-          const result = await api<{ items: Array<NpiTracking> }>(
-            '/workbench/procurement',
-          )
-          setPurchases(result.items)
-          setView('procurement')
-        } else if (loadProjects)
+        if (next.actor.role !== 'procurement' && loadProjects)
           setDashboard(await api<NpiDashboard>('/dashboard'))
+        setWorkbenchRevision((n) => n + 1)
         if (loadProjects && projectId.current) {
           const id = projectId.current,
             revision = projectRequest.current
@@ -524,6 +518,14 @@ export function NpiWorkspace() {
     routeInitialized.current = true
     const route = readWorkspaceLocation(window.location)
     if (!route.projectId) return
+    if (
+      route.view &&
+      ['manufacturing', 'purchasing', 'procurement'].includes(route.view) &&
+      navigationFor(meta.actor.role).includes(route.view)
+    ) {
+      setWorkbenchProjectId(route.projectId)
+      return
+    }
     if (meta.actor.role === 'procurement') {
       window.history.replaceState(null, '', '/npi?view=procurement')
       lastNavigationUrl.current = '/npi?view=procurement'
@@ -577,10 +579,28 @@ export function NpiWorkspace() {
   const showCreate = () =>
     openModal({
       title: '新建新品项目',
-      help: '名称、型号、负责人和要求日期必填；客户、电机参数和说明可以稍后补充。',
+      help: '选择电机类型，填写型号和订单台数。管理员可在“基础数据”添加更多类型。',
       path: '/projects',
       fields: [
-        { key: 'name', label: '新品名称', required: true },
+        {
+          key: 'motorType',
+          label: '电机类型',
+          type: 'select',
+          required: true,
+          options: meta?.motorTypes
+            .filter((t) => t.enabled)
+            .map((t) => ({ value: t.name, label: t.name })),
+        },
+        {
+          key: 'orderQuantity',
+          label: '订单台数',
+          type: 'number',
+          value: '1',
+          required: true,
+          min: 1,
+          max: 999999,
+          step: 1,
+        },
         { key: 'motorModel', label: '电机型号', required: true },
         { key: 'code', label: '项目编号 / 订单编号（留空自动生成）' },
         selectOwner(
@@ -1071,15 +1091,19 @@ export function NpiWorkspace() {
           ? meta?.actor.role === 'procurement'
           : ['technical', 'manufacturing'].includes(meta?.actor.role || ''))))
   const trackingTable = (items: Array<NpiTracking>) => (
-    <div className="npi-table-scroll">
-      <table className="npi-table npi-tracking-table">
+    <div className="npi-table-scroll npi-delivery-grid">
+      <table
+        className="npi-table npi-tracking-table npi-delivery-dense"
+        aria-label="任务物料明细"
+      >
         <thead>
           <tr>
             <th>任务 / 物料</th>
-            <th>回复责任人</th>
+            <th>物料编码</th>
+            <th>数量</th>
+            <th>责任人</th>
             <th>要求日期</th>
-            <th>首次承诺</th>
-            <th>当前承诺</th>
+            <th>预计完成</th>
             <th>实际完成</th>
             <th>状态</th>
             <th>操作</th>
@@ -1095,113 +1119,56 @@ export function NpiWorkspace() {
               }
             >
               <td data-label="任务 / 物料">
-                <strong>{i.name}</strong>
-                {view === 'project' &&
-                  project &&
-                  bottleneckLabel(project.kit, i.id) && (
-                    <span
-                      className="npi-badge npi-pending_reply"
-                      aria-label="齐套瓶颈标记"
-                    >
-                      {bottleneckLabel(project.kit, i.id)}
-                    </span>
-                  )}
-                {i.bomReference && (
-                  <>
-                    <small>物料编码：{i.bomReference.materialCode}</small>
-                    <small>{bomReferenceLabel(i.bomReference)}</small>
-                    {!i.bomReference.current && !i.actualCompleteDate && (
-                      <small className="npi-warning-text">
-                        BOM已换版，请在“历史”查看物料对照并联系技术负责人复核。
-                      </small>
-                    )}
-                  </>
-                )}
-                <small>
-                  {[
-                    i.motorModel,
-                    i.projectName,
-                    i.projectCode,
-                    sourceNames[i.sourceType],
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  {i.affectsKit ? ' · 影响齐套' : ''}
-                </small>
-                <small>{i.specification}</small>
-                {i.sourceType !== 'MANUFACTURING' && (
-                  <small>
-                    {i.sourceType === 'ERP_BOM' ? 'BOM基本用量：' : '数量：'}
-                    {i.qty.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}{' '}
-                    {i.unit}
-                  </small>
-                )}
+                <div className="npi-delivery-name">
+                  <button
+                    className="npi-bom-name-link"
+                    onClick={() => setTaskDetails(i)}
+                    aria-label={`查看${i.name}任务详情`}
+                    title={`${i.name} · ${i.specification}`}
+                  >
+                    {i.name}
+                  </button>
+                  <span className="npi-delivery-source">
+                    {sourceNames[i.sourceType]}
+                  </span>
+                </div>
               </td>
-              <td data-label="回复责任人">{i.ownerName || meta?.actor.name}</td>
+              <td data-label="物料编码" title={i.bomReference?.materialCode}>
+                {i.bomReference?.materialCode || '—'}
+              </td>
+              <td
+                data-label="数量"
+                title={
+                  i.sourceType === 'ERP_BOM' ? 'BOM单台基本用量' : '任务数量'
+                }
+              >
+                {i.qty.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')} {i.unit}
+              </td>
+              <td data-label="责任人" title={i.ownerName}>
+                {i.ownerName || '—'}
+              </td>
               <td data-label="要求日期">
                 <DateText value={i.requiredDate} />
               </td>
-              <td data-label="首次承诺">
-                <DateText value={i.firstCommittedDate} />
-              </td>
-              <td data-label="当前承诺">
+              <td
+                data-label="预计完成"
+                title={`首次承诺 ${i.firstCommittedDate || '未回复'} · 改期 ${i.changeCount || 0} 次`}
+              >
                 <DateText value={i.currentCommittedDate} />
-                {i.currentCommittedDate && (
-                  <small
-                    className={
-                      dateGap(i.currentCommittedDate, i.requiredDate)! > 0
-                        ? 'npi-warning-text'
-                        : ''
-                    }
-                  >
-                    {dateGap(i.currentCommittedDate, i.requiredDate)! > 0
-                      ? `较要求晚 ${dateGap(i.currentCommittedDate, i.requiredDate)} 天`
-                      : dateGap(i.currentCommittedDate, i.requiredDate)! < 0
-                        ? `较要求早 ${-dateGap(i.currentCommittedDate, i.requiredDate)!} 天`
-                        : '与要求同日'}
-                  </small>
-                )}
-                <small>
-                  {typeof i.changeCount === 'number'
-                    ? `改期 ${i.changeCount} 次`
-                    : ''}
-                </small>
               </td>
               <td data-label="实际完成">
                 <DateText value={i.actualCompleteDate} />
               </td>
               <td data-label="状态">
-                <Badge status={i.status} />
+                {i.bomReference?.current === false && !i.actualCompleteDate ? (
+                  <span className="npi-bom-status risk">待BOM复核</span>
+                ) : (
+                  <Badge status={i.status} />
+                )}
               </td>
               <td data-label="操作">
                 <div className="npi-row-actions">
-                  {!project &&
-                    i.programId &&
-                    ['admin', 'technical', 'supervisor'].includes(
-                      meta?.actor.role || '',
-                    ) && (
-                      <button
-                        onClick={() =>
-                          void openProject(i.programId, i.id, 'manufacturing')
-                        }
-                      >
-                        进入项目
-                      </button>
-                    )}
-                  <button
-                    aria-label={`${i.name}附件资料`}
-                    onClick={() => setFileItem(i)}
-                  >
-                    附件
-                  </button>
-                  {i.bomReference?.current === false &&
-                    !i.actualCompleteDate &&
-                    (i.trackingEnabled || i.affectsKit) && (
-                      <span className="npi-warning-text">
-                        待BOM复核，请项目负责人处理
-                      </span>
-                    )}
-                  {canReply(i) && (
+                  {canReply(i) ? (
                     <>
                       <button onClick={() => showPromise(i)}>
                         {i.currentCommittedDate ? '改期' : '回复'}
@@ -1210,31 +1177,9 @@ export function NpiWorkspace() {
                         {i.trackingType === 'purchase' ? '到货' : '完成'}
                       </button>
                     </>
+                  ) : (
+                    <button onClick={() => setTaskDetails(i)}>详情</button>
                   )}
-                  {project &&
-                    canAdjustPlan &&
-                    project.currentNpiStage !== 'completed' &&
-                    (i.trackingEnabled || i.affectsKit) &&
-                    (i.actualCompleteDate ? (
-                      canManage && (
-                        <button onClick={() => showCompletionCorrection(i)}>
-                          更正日期
-                        </button>
-                      )
-                    ) : (
-                      <button onClick={() => showPlanAdjustment(i)}>
-                        调整计划
-                      </button>
-                    ))}
-                  {
-                    <button
-                      aria-label={`${i.name}承诺历史`}
-                      onClick={() => setHistoryItem(i)}
-                    >
-                      <History size={16} />
-                      历史
-                    </button>
-                  }
                 </div>
               </td>
             </tr>
@@ -1244,7 +1189,7 @@ export function NpiWorkspace() {
       {!items.length && (
         <Empty
           title="当前没有符合条件的事项"
-          detail="添加零件或工装，或调整筛选后，这里会显示要求、承诺与实际日期。"
+          detail="添加零件或工装，或调整筛选。"
         />
       )}
     </div>
@@ -1278,6 +1223,8 @@ export function NpiWorkspace() {
     setLoading(false)
     setHistoryItem(null)
     setFileItem(null)
+    setTaskDetails(null)
+    setWorkbenchProjectId(null)
     setNavigationBlocked(false)
     setNavigationRevision((n) => n + 1)
     setView(next)
@@ -1327,7 +1274,13 @@ export function NpiWorkspace() {
         : meta?.actor.role === 'procurement'
           ? 'procurement'
           : 'dashboard'
-      if (meta && meta.actor.role !== 'procurement' && route.projectId) {
+      if (
+        route.projectId &&
+        ['manufacturing', 'purchasing', 'procurement'].includes(destination)
+      ) {
+        navigate(destination, false)
+        setWorkbenchProjectId(route.projectId)
+      } else if (meta && meta.actor.role !== 'procurement' && route.projectId) {
         if (project?.id === route.projectId) {
           projectRequest.current++
           setLoading(false)
@@ -1481,34 +1434,17 @@ export function NpiWorkspace() {
             view !== 'project' &&
             view !== 'settings' &&
             view !== 'data' &&
-            view !== 'trash' && (
+            view !== 'trash' &&
+            !(
+              workbenchProjectId &&
+              ['manufacturing', 'purchasing', 'procurement'].includes(view)
+            ) && (
               <div className="npi-heading">
                 <div>
                   <div className="npi-eyebrow">NEW PRODUCT INTRODUCTION</div>
                   <h1>{moduleInfo[view].title}</h1>
                   <p>{moduleInfo[view].description}</p>
                 </div>
-                {((view === 'manufacturing' &&
-                  ['admin', 'technical', 'manufacturing'].includes(
-                    meta.actor.role,
-                  )) ||
-                  (['procurement', 'purchasing'].includes(view) &&
-                    ['admin', 'procurement'].includes(meta.actor.role))) && (
-                  <button
-                    className="npi-button"
-                    onClick={() =>
-                      setQuickReply({
-                        kind:
-                          view === 'manufacturing'
-                            ? 'manufacturing'
-                            : 'procurement',
-                      })
-                    }
-                  >
-                    <Zap size={18} />
-                    完成时间快速回复
-                  </button>
-                )}
                 {['admin', 'technical'].includes(meta.actor.role) &&
                   ['dashboard', 'projects', 'bom'].includes(view) && (
                     <div className="npi-actions">
@@ -1570,44 +1506,41 @@ export function NpiWorkspace() {
             />
           )}
           {meta &&
-            dashboard &&
-            view === 'manufacturing' &&
-            (meta.actor.role === 'manufacturing' ? (
-              <NpiAssignedMaterials
-                actorId={meta.actor.id}
-                revision={dashboard}
-                managedProjectIds={[]}
-                scope="all"
-              />
-            ) : (
-              <NpiDeliveryList
-                title="生产任务"
-                items={dashboard.projects.flatMap((p) =>
-                  p.items
-                    .filter((i) => i.trackingType !== 'purchase')
-                    .map((i) => ({
-                      ...i,
-                      projectName: p.name,
-                      projectCode: p.code,
-                      motorModel: p.motorModel,
-                      currentNpiStage: p.currentNpiStage,
-                    })),
-                )}
+            ['manufacturing', 'purchasing', 'procurement'].includes(view) && (
+              <NpiProjectWorkbench
+                key={view}
+                api={api}
+                meta={meta}
+                kind={
+                  view === 'manufacturing' ? 'manufacturing' : 'procurement'
+                }
+                projectId={workbenchProjectId}
+                revision={workbenchRevision}
+                onSelect={(id) => {
+                  setWorkbenchProjectId(id)
+                  const url = `/npi?view=${view}${id ? `&project=${id}&tab=bom` : ''}`
+                  window.history.pushState(null, '', url)
+                  lastNavigationUrl.current = url
+                }}
+                onOpenProject={(id) =>
+                  void openProject(id, undefined, 'bom', null, true, 'projects')
+                }
+                onQuick={(id, itemIds) =>
+                  setQuickReply({
+                    kind:
+                      view === 'manufacturing'
+                        ? 'manufacturing'
+                        : 'procurement',
+                    projectId: id,
+                    itemIds,
+                  })
+                }
+                onReply={showPromise}
+                onDetails={setTaskDetails}
+                canReply={canReply}
                 renderTable={trackingTable}
               />
-            ))}
-          {meta && dashboard && view === 'purchasing' && (
-            <NpiPreparationBoard
-              key={view}
-              dashboard={dashboard}
-              actor={meta.actor}
-              users={meta.users}
-              mode={view}
-              onOpen={(id, nextTab, itemId) =>
-                void openProject(id, itemId, nextTab)
-              }
-            />
-          )}
+            )}
           {meta && dashboard && view === 'reports' && (
             <NpiReports
               dashboard={dashboard}
@@ -1616,15 +1549,14 @@ export function NpiWorkspace() {
               }
             />
           )}
-          {view === 'procurement' && (
-            <NpiProcurementWorkbench
-              items={purchases}
-              today={businessToday()}
-              renderTable={trackingTable}
+          {view === 'procurement' && meta && workbenchProjectId && (
+            <NpiIssues
+              key={workbenchProjectId}
+              api={api}
+              meta={meta}
+              scopeProjectId={workbenchProjectId}
+              onChanged={refresh}
             />
-          )}
-          {view === 'procurement' && meta && (
-            <NpiIssues api={api} meta={meta} onChanged={refresh} />
           )}
           {view === 'project' && project && (
             <>
@@ -1641,8 +1573,11 @@ export function NpiWorkspace() {
                       <Badge status={project.riskStatus} />
                     </h1>
                     <p>
-                      {project.motorModel} · 样机要求{' '}
-                      {project.prototypeRequiredDate}
+                      {project.motorModel} · 订单{' '}
+                      {project.profile.orderQuantity
+                        ? `${project.profile.orderQuantity} 台`
+                        : '台数未填写'}{' '}
+                      · 样机要求 {project.prototypeRequiredDate}
                     </p>
                     {meta?.actor.role === 'supervisor' &&
                       project.currentNpiStage !== 'completed' && (
@@ -2771,10 +2706,129 @@ export function NpiWorkspace() {
                 section={view === 'data' ? 'templates' : 'users'}
                 meta={meta}
                 onTemplate={showTemplate}
+                onChanged={() => refresh(true)}
               />
             )}
         </div>
       </main>
+      {taskDetails && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setTaskDetails(null)
+          }}
+        >
+          <DialogContent className="npi-modal">
+            <DialogTitle>{taskDetails.name}</DialogTitle>
+            <DialogDescription>
+              {trackingIdentity(taskDetails)}
+            </DialogDescription>
+            <dl className="npi-definition-list">
+              {[
+                ['来源', sourceNames[taskDetails.sourceType]],
+                ['规格', taskDetails.specification || '—'],
+                [
+                  taskDetails.sourceType === 'ERP_BOM' ? 'BOM单台用量' : '数量',
+                  `${taskDetails.qty} ${taskDetails.unit}`,
+                ],
+                ['责任人', taskDetails.ownerName || '—'],
+                ['要求日期', taskDetails.requiredDate],
+                ['首次承诺', taskDetails.firstCommittedDate || '未回复'],
+                ['预计完成', taskDetails.currentCommittedDate || '未回复'],
+                ['实际完成', taskDetails.actualCompleteDate || '未完成'],
+                ['影响齐套', taskDetails.affectsKit ? '是' : '否'],
+                ['备注', taskDetails.remark || '—'],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {taskDetails.bomReference?.current === false &&
+              !taskDetails.actualCompleteDate && (
+                <p className="npi-warning-text">
+                  BOM已换版，请联系项目负责人复核后再回复。
+                </p>
+              )}
+            <div className="npi-actions">
+              {canReply(taskDetails) && (
+                <>
+                  <button
+                    className="npi-button"
+                    onClick={() => {
+                      showPromise(taskDetails)
+                      setTaskDetails(null)
+                    }}
+                  >
+                    {taskDetails.currentCommittedDate
+                      ? '修改预计完成'
+                      : '回复完成时间'}
+                  </button>
+                  <button
+                    className="npi-button secondary"
+                    onClick={() => {
+                      showComplete(taskDetails)
+                      setTaskDetails(null)
+                    }}
+                  >
+                    {taskDetails.trackingType === 'purchase'
+                      ? '确认到货'
+                      : '确认完成'}
+                  </button>
+                </>
+              )}
+              <button
+                className="npi-button secondary"
+                aria-label={`${taskDetails.name}附件资料`}
+                onClick={() => {
+                  setFileItem(taskDetails)
+                  setTaskDetails(null)
+                }}
+              >
+                附件
+              </button>
+              <button
+                className="npi-button secondary"
+                aria-label={`${taskDetails.name}承诺历史`}
+                onClick={() => {
+                  setHistoryItem(taskDetails)
+                  setTaskDetails(null)
+                }}
+              >
+                历史
+              </button>
+              {project &&
+                canAdjustPlan &&
+                project.currentNpiStage !== 'completed' &&
+                (taskDetails.trackingEnabled || taskDetails.affectsKit) &&
+                (taskDetails.actualCompleteDate ? (
+                  canManage && (
+                    <button
+                      className="npi-button secondary"
+                      onClick={() => {
+                        showCompletionCorrection(taskDetails)
+                        setTaskDetails(null)
+                      }}
+                    >
+                      更正日期
+                    </button>
+                  )
+                ) : (
+                  <button
+                    className="npi-button secondary"
+                    onClick={() => {
+                      showPlanAdjustment(taskDetails)
+                      setTaskDetails(null)
+                    }}
+                  >
+                    调整计划
+                  </button>
+                ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       {bomDetailRow && project && (
         <Dialog
           open
@@ -3007,6 +3061,9 @@ export function NpiWorkspace() {
                         type={f.type || 'text'}
                         maxLength={f.maxLength}
                         inputMode={f.inputMode}
+                        min={f.min}
+                        max={f.max}
+                        step={f.step}
                         defaultValue={String(f.value ?? '')}
                         required={f.required}
                       />
@@ -3054,7 +3111,10 @@ export function NpiWorkspace() {
               key={fileItem.id}
               api={api}
               scope={{ kind: 'tracking', id: fileItem.id }}
-              readOnly={project?.currentNpiStage === 'completed'}
+              readOnly={
+                project?.currentNpiStage === 'completed' ||
+                fileItem?.currentNpiStage === 'completed'
+              }
               buyer={meta?.actor.role === 'procurement'}
               onBusyChange={fileOperation.onBusyChange}
             />
@@ -3088,13 +3148,7 @@ export function NpiWorkspace() {
             setProcurementReply(null)
           }}
           onSaved={async () => {
-            const next = await api<{
-              actorId: string
-              items: Array<NpiTracking>
-            }>('/workbench/procurement')
-            if (next.actorId !== meta.actor.id)
-              throw new Error('登录账号已改变，请整页刷新核对。')
-            setPurchases(next.items)
+            await refresh()
             setError('')
             setNotice(
               procurementReply.complete

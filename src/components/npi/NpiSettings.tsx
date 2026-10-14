@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { NpiMotorTypes } from './NpiMotorTypes'
 import { NpiDepartments } from './NpiDepartments'
 import { AccountManager } from '../accounts/AccountManager'
 import { useMemo, useRef, useState } from 'react'
@@ -15,11 +16,13 @@ export function NpiSettings({
   meta,
   api,
   onTemplate,
+  onChanged,
   section = 'all',
 }: {
   section?: 'all' | 'templates' | 'users'
   meta: NpiMetadata
   api: <T>(path: string, method?: string, data?: unknown) => Promise<T>
+  onChanged: () => Promise<void>
   onTemplate: (template?: Template) => void
 }) {
   const [templateQuery, setTemplateQuery] = useState('')
@@ -72,6 +75,7 @@ export function NpiSettings({
           </TabsList>
         )}
         <TabsContent value="templates">
+          <NpiMotorTypes meta={meta} api={api} onChanged={onChanged} />
           <section className="npi-panel" aria-label="导入模板管理">
             <div className="npi-panel-title">
               <h2>BOM导入模板</h2>

@@ -29,6 +29,13 @@
       "when": 1791849600000,
       "tag": "0003_direct_delivery_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791985264605,
+      "tag": "0004_bouncy_prima",
+      "breakpoints": true
     }
   ]
 }
