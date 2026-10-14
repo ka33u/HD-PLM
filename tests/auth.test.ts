@@ -99,6 +99,56 @@ try {
       401,
     )
   })
+  await test('Migrated prefixed Argon2 accounts can log in and must change their password before accessing work', async () => {
+    const id = crypto.randomUUID(),
+      address = id + '@legacy-auth.test.invalid'
+    const initial = 'Legacy-' + crypto.randomUUID()
+    const encoded = await hashPassword(initial),
+      wrapped = 'argon2id:' + encoded
+    assert.equal(await checkPassword(wrapped, initial), true)
+    assert.equal(await checkPassword(wrapped, initial + '-wrong'), false)
+    assert.equal(await checkPassword('unknown:' + encoded, initial), false)
+    assert.equal(
+      await checkPassword('argon2id:$argon2id$broken', initial),
+      false,
+    )
+    await db
+      .insert(users)
+      .values({
+        id,
+        email: address,
+        name: '迁移管理员验证',
+        passwordHash: wrapped,
+        mustChangePassword: true,
+      })
+    await db.insert(npiUserRoles).values({ userId: id, role: 'admin' })
+    const signed = await login(address, initial)
+    assert.equal(signed.response.status, 200)
+    assert.equal(signed.data.user.mustChangePassword, true)
+    const token = tokenOf(signed.response)
+    assert.equal(
+      (await call('/api/v1/npi/meta', 'GET', undefined, token, id)).data.code,
+      'PASSWORD_CHANGE_REQUIRED',
+    )
+    assert.equal(
+      (await db.select().from(users).where(eq(users.id, id)))[0]!.passwordHash,
+      wrapped,
+    )
+    const next = 'Changed-' + crypto.randomUUID()
+    const changed = await call(
+      '/api/auth/password',
+      'POST',
+      { oldPassword: initial, password: next },
+      token,
+      id,
+    )
+    assert.equal(changed.response.status, 200)
+    const [updated] = await db.select().from(users).where(eq(users.id, id))
+    assert.match(updated!.passwordHash!, /^\$argon2id\$/)
+    assert.equal(updated!.mustChangePassword, false)
+    assert.equal(await checkPassword(updated!.passwordHash, initial), false)
+    assert.equal((await login(address, next)).response.status, 200)
+  })
   await test('Unauthenticated, cross-origin, malformed and non-admin requests cannot manage accounts', async () => {
     assert.equal(
       (await call('/api/accounts', 'GET', undefined, '')).response.status,

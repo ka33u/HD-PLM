@@ -48,7 +48,11 @@ export const checkPassword = async (
   password: string,
 ) => {
   try {
-    return encoded ? await verify(encoded, password) : false
+    // Legacy installations wrapped the PHC hash with an algorithm label.
+    const normalized = encoded?.startsWith('argon2id:$argon2id$')
+      ? encoded.slice('argon2id:'.length)
+      : encoded
+    return normalized ? await verify(normalized, password) : false
   } catch {
     return false
   }
