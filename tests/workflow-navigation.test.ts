@@ -1,3 +1,4 @@
+import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Actual multi-role browser workflow against a fresh database and built application.
 import 'dotenv/config'
@@ -239,7 +240,7 @@ async function seedWorkflow() {
 
 try {
   await seedWorkflow()
-  await test('Browser: persistent project routes, protected drafts, role boundaries and a complete five-stage collaboration', async () => {
+  await test('Browser: persistent project routes, protected drafts, role boundaries and a complete six-stage collaboration', async () => {
     mkdirSync('runtime/test-evidence', { recursive: true })
     const log = openSync(
       'runtime/test-evidence/workflow-navigation-server.log',
@@ -272,7 +273,7 @@ try {
       return page
     }
     const guide = (page: Page) =>
-      page.getByRole('region', { name: '当前阶段协作指引', exact: true })
+      page.getByRole('region', { name: '新品全流程跟踪', exact: true })
     async function expectTab(page: Page, tab: string, name: string) {
       await expect
         .poll(() => new URL(page.url()).searchParams.get('project'))
@@ -285,7 +286,7 @@ try {
       ).toHaveAttribute('aria-selected', 'true')
     }
     async function advance(page: Page, next: string, label: string) {
-      await page.getByRole('tab', { name: '概览', exact: true }).click()
+      await page.getByRole('tab', { name: '项目流程', exact: true }).click()
       const before = await guide(page).innerText()
       await page
         .getByRole('button', { name: `推进阶段 · ${label}`, exact: true })
@@ -359,24 +360,26 @@ try {
       }
       assert.ok(ready, 'built server must become ready')
       const tech = await pageFor('technical', projectUrl('bom'))
-      await expectTab(tech, 'bom', 'ERP BOM')
+      await expectTab(tech, 'bom', 'BOM明细')
       await expect(
         tech.getByRole('table', { name: '完整BOM明细' }),
       ).toContainText('待生产机壳')
       await tech.reload()
-      await expectTab(tech, 'bom', 'ERP BOM')
-      await tech.getByRole('tab', { name: '项目资料', exact: true }).click()
-      await expectTab(tech, 'files', '项目资料')
-      await tech.getByRole('tab', { name: '承诺与动态', exact: true }).click()
-      await expectTab(tech, 'history', '承诺与动态')
+      await expectTab(tech, 'bom', 'BOM明细')
+      await tech.getByRole('tab', { name: '资料与记录', exact: true }).click()
+      await expectTab(tech, 'files', '资料与记录')
+      await tech
+        .getByRole('button', { name: '承诺与动态', exact: true })
+        .click()
+      await expectTab(tech, 'history', '资料与记录')
       await tech.goBack()
-      await expectTab(tech, 'files', '项目资料')
+      await expectTab(tech, 'files', '资料与记录')
       await tech.goBack()
-      await expectTab(tech, 'bom', 'ERP BOM')
+      await expectTab(tech, 'bom', 'BOM明细')
       await tech.goForward()
-      await expectTab(tech, 'files', '项目资料')
+      await expectTab(tech, 'files', '资料与记录')
       await tech.reload()
-      await expectTab(tech, 'files', '项目资料')
+      await expectTab(tech, 'files', '资料与记录')
       await tech
         .getByRole('button', { name: '返回新品项目', exact: true })
         .click()
@@ -387,12 +390,14 @@ try {
         tech.getByRole('region', { name: '新品项目目录' }),
       ).toBeVisible()
       await tech.goBack()
-      await expectTab(tech, 'files', '项目资料')
-      await tech.getByRole('tab', { name: '概览', exact: true }).click()
+      await expectTab(tech, 'files', '资料与记录')
+      await tech.getByRole('tab', { name: '项目流程', exact: true }).click()
       await expect(guide(tech)).toBeVisible()
-      for (const stage of ['设计', '制造', '样机', '试验', '完成'])
+      for (const stage of ['设计', '制造', '样机', '试验', '试用', '结项'])
         await expect(guide(tech)).toContainText(stage)
-      await expect(guide(tech)).toContainText('协同验证-technical')
+      await expect(tech.locator('.npi-project-summary')).toContainText(
+        '协同验证-technical',
+      )
       await expect(
         tech.getByRole('button', { name: '编辑项目信息', exact: true }),
       ).toBeVisible()
@@ -430,18 +435,18 @@ try {
       await tech.goBack()
       await received
       await tech.goBack()
-      await expectTab(tech, 'overview', '概览')
+      await expectTab(tech, 'overview', '项目流程')
       release()
       await fulfilled
-      await tech.getByRole('tab', { name: '项目资料', exact: true }).click()
-      await expectTab(tech, 'files', '项目资料')
+      await tech.getByRole('tab', { name: '资料与记录', exact: true }).click()
+      await expectTab(tech, 'files', '资料与记录')
       await expect(tech.locator('.npi-project-summary')).toContainText(
         'FLOW-UI-001',
       )
       await expect(tech.locator('.npi-project-summary')).not.toContainText(
         'FLOW-UI-002',
       )
-      await tech.getByRole('tab', { name: '概览', exact: true }).click()
+      await tech.getByRole('tab', { name: '项目流程', exact: true }).click()
 
       // These dialogs own local form state and are not represented by Workspace's dialog booleans.
       for (const [button, value] of [
@@ -452,7 +457,7 @@ try {
         const dialog = tech.getByRole('dialog')
         await dialog.getByLabel('电机型号', { exact: true }).fill(value!)
         await tech.goBack()
-        await expectTab(tech, 'overview', '概览')
+        await expectTab(tech, 'overview', '项目流程')
         await expect(
           dialog.getByLabel('电机型号', { exact: true }),
         ).toHaveValue(value!)
@@ -460,15 +465,15 @@ try {
         await dialog.getByRole('button', { name: '取消', exact: true }).click()
         await expect(dialog).toHaveCount(0)
       }
-      await tech.getByRole('tab', { name: /^项目问题/ }).click()
-      await expectTab(tech, 'issues', '项目问题')
+      await tech.getByRole('tab', { name: /^问题闭环/ }).click()
+      await expectTab(tech, 'issues', '问题闭环')
       await tech.getByRole('button', { name: '新建问题', exact: true }).click()
       const issueDraft = tech.getByRole('dialog')
       await issueDraft
         .getByLabel('问题标题', { exact: true })
         .fill('后退仍保留的问题草稿')
       await tech.goBack()
-      await expectTab(tech, 'issues', '项目问题')
+      await expectTab(tech, 'issues', '问题闭环')
       await expect(
         issueDraft.getByLabel('问题标题', { exact: true }),
       ).toHaveValue('后退仍保留的问题草稿')
@@ -476,22 +481,21 @@ try {
         .getByRole('button', { name: '取消', exact: true })
         .click()
 
-      await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
+      await tech.getByRole('tab', { name: 'BOM明细', exact: true }).click()
       await tech.getByLabel('BOM版本', { exact: true }).selectOption(oldBomId)
       await expect(tech.getByLabel('BOM版本', { exact: true })).toHaveValue(
         oldBomId,
       )
-      await tech.getByRole('tab', { name: '概览', exact: true }).click()
-      await guide(tech)
-        .getByRole('button', { name: /打开BOM与任务分配/ })
-        .click()
-      await expectTab(tech, 'bom', 'ERP BOM')
+      await tech.getByRole('tab', { name: '项目流程', exact: true }).click()
+      await tech.getByRole('tab', { name: 'BOM明细', exact: true }).click()
+      await expectTab(tech, 'bom', 'BOM明细')
       await expect(tech.getByLabel('BOM版本', { exact: true })).toHaveValue(
-        activeBomId,
+        oldBomId,
       )
       await tech.getByLabel('BOM版本', { exact: true }).selectOption(oldBomId)
-      await tech.getByRole('tab', { name: '样机齐套', exact: true }).click()
-      await tech.getByRole('tab', { name: 'ERP BOM', exact: true }).click()
+      await tech.getByRole('tab', { name: '交付任务', exact: true }).click()
+      await tech.getByRole('button', { name: '齐套分析', exact: true }).click()
+      await tech.getByRole('tab', { name: 'BOM明细', exact: true }).click()
       await tech
         .getByLabel('BOM版本', { exact: true })
         .selectOption(activeBomId)
@@ -509,12 +513,12 @@ try {
         .getByLabel('物料名称', { exact: true })
         .fill('后退仍保留的修订名称')
       await tech.goBack()
-      await expectTab(tech, 'bom', 'ERP BOM')
+      await expectTab(tech, 'bom', 'BOM明细')
       await expect(
         revision.getByLabel('物料名称', { exact: true }),
       ).toHaveValue('后退仍保留的修订名称')
       await revision.getByRole('button', { name: '取消', exact: true }).click()
-      await tech.getByRole('tab', { name: '概览', exact: true }).click()
+      await tech.getByRole('tab', { name: '项目流程', exact: true }).click()
 
       const supervisor = await pageFor('supervisor')
       await expect(guide(supervisor)).toBeVisible()
@@ -525,7 +529,10 @@ try {
         supervisor.getByRole('button', { name: /^推进阶段/ }),
       ).toHaveCount(0)
       await supervisor
-        .getByRole('tab', { name: '样机齐套', exact: true })
+        .getByRole('tab', { name: '交付任务', exact: true })
+        .click()
+      await supervisor
+        .getByRole('button', { name: '齐套分析', exact: true })
         .click()
       await expect(
         supervisor.getByRole('button', { name: '集中回复', exact: true }),
@@ -539,7 +546,7 @@ try {
       for (const page of [buyer, outsider]) {
         await expect(page.locator('.npi-project-summary')).toHaveCount(0)
         await expect(
-          page.getByRole('tab', { name: 'ERP BOM', exact: true }),
+          page.getByRole('tab', { name: 'BOM明细', exact: true }),
         ).toHaveCount(0)
         await expect(guide(page)).toHaveCount(0)
         await expect(
@@ -549,6 +556,8 @@ try {
       await call('procurement', `/projects/${projectId}`, 'GET', undefined, 403)
       await call('otherTech', `/projects/${projectId}`, 'GET', undefined, 403)
 
+      await seedLifecycleForLegacyTests(db, s, projectId)
+      await tech.reload()
       await advance(tech, 'manufacturing', '制造准备')
       const mfg = await pageFor(
         'manufacturing',
@@ -583,7 +592,8 @@ try {
         fullPage: true,
       })
       await advance(tech, 'test', '样机试验')
-      await advance(tech, 'completed', '完成')
+      await advance(tech, 'trial', '客户试用')
+      await advance(tech, 'completed', '定型结项')
       await expect(tech.getByRole('button', { name: /^推进阶段/ })).toHaveCount(
         0,
       )
@@ -592,7 +602,7 @@ try {
       ).toHaveCount(0)
       await expect(guide(tech)).toContainText(/只读|归档|完成/)
       await tech.reload()
-      await expectTab(tech, 'overview', '概览')
+      await expectTab(tech, 'overview', '项目流程')
       await mfg.reload()
       await expect(
         mfg.getByRole('button', { name: '集中回复', exact: true }),
@@ -615,7 +625,7 @@ try {
       )
       assert.equal(
         final.events.filter((e: any) => e.action === 'STAGE_CHANGED').length,
-        4,
+        5,
       )
       assert.deepEqual(errors, [])
     } finally {

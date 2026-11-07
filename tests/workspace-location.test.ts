@@ -107,5 +107,7 @@ test('ordinary module navigation does not invent a project or retain a focus', (
   const route = read(projectLocation(projectId, 'files', 'bom'))
   assert.equal(route.itemId, undefined)
   assert.equal(route.tab, 'files')
-  assert.equal(route.view, 'bom')
+  assert.equal(route.view, 'projects')
+  assert.equal(read('/npi?view=reports').view, 'dashboard')
+  assert.equal(read(`/npi?view=bom&project=${projectId}`).tab, 'bom')
 })

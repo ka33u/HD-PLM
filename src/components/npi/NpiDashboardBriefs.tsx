@@ -55,7 +55,7 @@ function BriefList({
           </h2>
           <p>
             {kind === 'todos'
-              ? '待回复与逾期任务，按要求日期排序'
+              ? '流程跟进、待回复与逾期任务，按计划日期排序'
               : '逾期与风险项目，点击进入项目明细'}
           </p>
         </div>
@@ -99,7 +99,10 @@ function BriefList({
               <option value="all">全部</option>
               <option value="overdue">逾期</option>
               {kind === 'todos' ? (
-                <option value="pending_reply">待回复</option>
+                <>
+                  <option value="pending_reply">待回复</option>
+                  <option value="process">流程跟进</option>
+                </>
               ) : (
                 <option value="risk">风险</option>
               )}
@@ -169,8 +172,25 @@ export function NpiDashboardBriefs({
     () =>
       projects
         .filter((p) => p.currentNpiStage !== 'completed')
-        .flatMap((p) =>
-          p.items
+        .flatMap((p) => [
+          ...(p.lifecycle?.pendingCount
+            ? [
+                {
+                  id: 'process-' + p.id,
+                  projectId: p.id,
+                  itemId: undefined,
+                  title: `${projectTitle(p)} · 流程跟进`,
+                  search: `${projectTitle(p)} ${p.code} ${p.motorModel} ${p.lifecycle.nextLabel}`,
+                  status: p.lifecycle.overdueCount ? 'overdue' : 'process',
+                  detail: `项目负责人 · ${p.lifecycle.pendingCount} 项待办${p.lifecycle.overdueCount ? `，${p.lifecycle.overdueCount} 项逾期` : ''}`,
+                  date: [p.lifecycle.nextDate, p.lifecycle.nextLabel]
+                    .filter(Boolean)
+                    .join(' · '),
+                  requiredDate: p.lifecycle.nextDate || '9999-12-31',
+                },
+              ]
+            : []),
+          ...p.items
             .filter(
               (i) =>
                 (i.trackingEnabled || i.affectsKit) &&
@@ -188,7 +208,7 @@ export function NpiDashboardBriefs({
               date: `要求 ${i.requiredDate} · 承诺 ${i.currentCommittedDate || '待回复'}`,
               requiredDate: i.requiredDate,
             })),
-        )
+        ])
         .sort(
           (a, b) =>
             a.requiredDate.localeCompare(b.requiredDate) ||
@@ -213,6 +233,11 @@ export function NpiDashboardBriefs({
         )
         .map((p) => {
           const detail =
+            (p.lifecycle?.overdueCount
+              ? `流程跟进逾期 ${p.lifecycle.overdueCount} 项，请负责人核对计划和结论`
+              : p.lifecycle?.failedCount
+                ? '最新流程结论未通过，请整改并复核'
+                : '') ||
             p.kit.alerts.find((a) => a.code !== 'PENDING_REPLY')?.message ||
             (p.riskStatus === 'overdue'
               ? '存在逾期未完成项，请查看项目明细'

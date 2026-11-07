@@ -760,7 +760,8 @@ try {
       ])
       const ap = await admin.newPage()
       await ap.goto(root + '/npi?view=bom')
-      await ap.getByRole('button', { name: '进入BOM ↗', exact: true }).click()
+      await ap.getByRole('button', { name: '项目详情 ↗', exact: true }).click()
+      await ap.getByRole('tab', { name: 'BOM明细', exact: true }).click()
       await ap
         .getByRole('button', { name: '生产完成时间快速回复', exact: true })
         .click()

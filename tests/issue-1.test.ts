@@ -738,7 +738,7 @@ try {
         await expect(page.getByRole('heading', { level: 1 })).toContainText(
           model,
         )
-        await page.getByRole('tab', { name: '项目资料', exact: true }).click()
+        await page.getByRole('tab', { name: '资料与记录', exact: true }).click()
         const files = page.getByRole('region', { name: '附件资料' })
         await files
           .getByLabel('选择文件或照片', { exact: true })
@@ -780,20 +780,8 @@ try {
           .getByRole('dialog')
           .getByRole('button', { name: '关闭弹窗', exact: true })
           .click()
-        await nav.getByRole('button', { name: '报表看板', exact: true }).click()
-        await page
-          .locator('.npi-stage-distribution')
-          .getByRole('button', { name: /设计中/ })
-          .click()
-        await expect(
-          page.getByRole('cell', { name: '项目清单', exact: true }),
-        ).toHaveCount(0)
-        await expect(
-          page.getByRole('button', {
-            name: model + ' · ' + projectName + ' ↗',
-            exact: true,
-          }),
-        ).toBeVisible()
+        await nav.getByRole('button', { name: '首页', exact: true }).click()
+        await expect(page.locator('main')).toContainText(model)
         await page.screenshot({
           path: `runtime/test-evidence/issue-1-reports-${mobile ? 'mobile' : 'desktop'}.png`,
           fullPage: true,
@@ -807,11 +795,12 @@ try {
         )
         if (!mobile) {
           await nav
-            .getByRole('button', { name: 'BOM管理', exact: true })
+            .getByRole('button', { name: '新品项目', exact: true })
             .click()
           await page
-            .getByRole('button', { name: '进入BOM ↗', exact: true })
+            .getByRole('button', { name: '项目详情 ↗', exact: true })
             .click()
+          await page.getByRole('tab', { name: 'BOM明细', exact: true }).click()
           await page.locator('.npi-bom-name-link').first().click()
           await page
             .getByRole('button', { name: '修订物料', exact: true })
@@ -866,6 +855,7 @@ try {
             .getByRole('button', { name: '保存', exact: true })
             .click()
           await expect(page.getByRole('dialog')).toHaveCount(0)
+          await page.getByRole('tab', { name: 'BOM明细', exact: true }).click()
           await page.locator('.npi-bom-name-link').first().click()
           await page
             .getByRole('button', { name: '转交采购', exact: true })

@@ -583,7 +583,8 @@ try {
     )
     assert.equal(history.item.motorCode, 'MOTOR-EDIT-002')
     assert.equal(history.history.length, 1)
-    await p.getByRole('tab', { name: '概览', exact: true }).click()
+    await p.getByRole('tab', { name: '项目流程', exact: true }).click()
+    await p.getByText('项目信息与电机参数', { exact: true }).click()
     await p
       .getByRole('button', { name: '编辑概览项目信息', exact: true })
       .click()

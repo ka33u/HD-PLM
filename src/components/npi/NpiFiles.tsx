@@ -1,3 +1,4 @@
+import { resultLabels } from '../../lib/npi/lifecycle'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { requestId as createRequestId } from '../../lib/request-id'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -17,7 +18,13 @@ export function NpiFiles({
   readOnly = false,
   disabled = false,
   onBusyChange,
+  lifecycleVersion,
+  defaultCategory,
+  onChanged,
 }: {
+  lifecycleVersion?: number
+  defaultCategory?: string
+  onChanged?: () => Promise<void>
   api: Api
   scope: FileScope
   buyer?: boolean
@@ -33,6 +40,16 @@ export function NpiFiles({
     [loadError, setLoadError] = useState(''),
     [message, setMessage] = useState('')
   const [archiveId, setArchiveId] = useState('')
+  const initialCategory =
+    defaultCategory ||
+    (scope.kind === 'lifecycle'
+      ? 'report'
+      : scope.kind === 'issue'
+        ? 'issue'
+        : buyer
+          ? 'receipt'
+          : 'technical')
+  const [category, setCategory] = useState(initialCategory)
   const busy = operation !== null
   const blocked = busy || loading || !!loadError || disabled
   const pending = useRef<{ notify?: (busy: boolean) => void } | null>(null)
@@ -99,6 +116,8 @@ export function NpiFiles({
       return
     }
     input.set('requestId', requestId.current)
+    if (scope.kind === 'lifecycle')
+      input.set('expectedRecordVersion', String(lifecycleVersion))
     const token = begin('upload')
     if (!token) return
     setError('')
@@ -108,8 +127,10 @@ export function NpiFiles({
       if (!isCurrent(token)) return
       requestId.current = createRequestId()
       form.reset()
+      setCategory(initialCategory)
       setMessage('资料已上传成功，无需重复上传。')
       await reload()
+      await onChanged?.()
     } catch (err) {
       if (!isCurrent(token)) return
       setError(err instanceof Error ? err.message : '上传失败，请核对后重试')
@@ -123,9 +144,11 @@ export function NpiFiles({
         <h3>
           {scope.kind === 'project'
             ? '项目资料'
-            : scope.kind === 'issue'
-              ? '问题附件与照片'
-              : '技术附件与到货资料'}
+            : scope.kind === 'lifecycle'
+              ? '报告与现场依据'
+              : scope.kind === 'issue'
+                ? '问题附件与照片'
+                : '技术附件与到货资料'}
         </h3>
         <button
           type="button"
@@ -176,8 +199,18 @@ export function NpiFiles({
             </label>
             <label>
               文件分类
-              <select name="category" aria-label="文件分类">
-                {scope.kind === 'issue' ? (
+              <select
+                name="category"
+                aria-label="文件分类"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {scope.kind === 'lifecycle' ? (
+                  <>
+                    <option value="report">报告及分析</option>
+                    <option value="evidence">现场照片 / 客户反馈依据</option>
+                  </>
+                ) : scope.kind === 'issue' ? (
                   <option value="issue">问题照片 / 说明资料</option>
                 ) : (
                   <>
@@ -189,6 +222,35 @@ export function NpiFiles({
                 )}
               </select>
             </label>
+            {scope.kind === 'lifecycle' && category === 'report' && (
+              <>
+                <label>
+                  报告分析
+                  <textarea
+                    name="analysis"
+                    aria-label="报告分析"
+                    maxLength={8000}
+                    rows={3}
+                    required
+                    placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
+                  />
+                </label>
+                <label>
+                  报告结论
+                  <select
+                    name="conclusion"
+                    aria-label="报告结论"
+                    defaultValue=""
+                    required
+                  >
+                    <option value="">请选择</option>
+                    <option value="pass">通过</option>
+                    <option value="fail">不通过</option>
+                    <option value="continue">需要补充验证</option>
+                  </select>
+                </label>
+              </>
+            )}
             <label>
               选择文件或照片
               <input
@@ -241,6 +303,12 @@ export function NpiFiles({
                     {f.uploader} ·{' '}
                     {new Date(f.createdAt).toLocaleString('zh-CN')}
                   </small>
+                  {f.analysis && (
+                    <details>
+                      <summary>报告分析 · {resultLabels[f.conclusion]}</summary>
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{f.analysis}</p>
+                    </details>
+                  )}
                   {f.archivedAt && <p>已归档：{f.archiveReason}</p>}
                   {!f.available && <p>文件已不可用，请联系管理员核查</p>}
                   <div className="npi-row-actions">
@@ -277,6 +345,9 @@ export function NpiFiles({
                         try {
                           await api(`/file-archive/${f.id}`, 'POST', {
                             reason,
+                            ...(scope.kind === 'lifecycle'
+                              ? { expectedRecordVersion: lifecycleVersion }
+                              : {}),
                           })
                           if (!isCurrent(token)) return
                           setArchiveId('')
@@ -284,6 +355,7 @@ export function NpiFiles({
                             '资料已归档，勾选“显示已归档资料”可查看原件。',
                           )
                           await reload()
+                          await onChanged?.()
                         } catch (err) {
                           if (!isCurrent(token)) return
                           setError(

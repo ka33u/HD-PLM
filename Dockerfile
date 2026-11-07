@@ -13,6 +13,7 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY docs ./docs
 COPY scripts/container-entry.sh ./container-entry.sh
 COPY package.json LICENSE NOTICE.md ./
 RUN mkdir -p /app/runtime/attachments && chown -R node:node /app/runtime

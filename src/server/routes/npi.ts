@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { getLifecycle, saveLifecycle } from '../../lib/npi/lifecycle-service'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { projectWorkbench } from '../../lib/npi/project-workbench'
 import { saveMotorType } from '../../lib/npi/motor-types'
@@ -246,6 +249,41 @@ app.patch('/projects/:id/plan', async (c) =>
     await applyProjectChange(
       c.get('userId'),
       c.req.param('id'),
+      await c.req.json(),
+    ),
+  ),
+)
+app.get('/process-guide', async (c) => {
+  await npi.getActor(c.get('userId'))
+  try {
+    const bytes = await readFile(
+      resolve('docs/设计部新品全流程跟踪管理办法.docx'),
+    )
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        'Content-Type':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="HD-NPI-Process.docx"; filename*=UTF-8''${encodeURIComponent('设计部新品全流程跟踪管理办法.docx')}`,
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
+  } catch {
+    throw new NpiError(
+      'DOCUMENT_NOT_FOUND',
+      '流程文件暂不可用，请联系管理员核对部署文件',
+      503,
+    )
+  }
+})
+app.get('/projects/:id/lifecycle', async (c) =>
+  c.json(await getLifecycle(c.get('userId'), c.req.param('id'))),
+)
+app.put('/projects/:id/lifecycle/:recordId', async (c) =>
+  c.json(
+    await saveLifecycle(
+      c.get('userId'),
+      c.req.param('id'),
+      c.req.param('recordId'),
       await c.req.json(),
     ),
   ),

@@ -9,6 +9,7 @@ type DashboardProject = {
   code: string
   manufacturingOwnerId: string
   currentNpiStage: string
+  lifecycle?: { failedCount: number; overdueCount: number }
   riskStatus: string
   prototypeRequiredDate: string
   kit: {
@@ -34,7 +35,9 @@ export function projectMatchesFilter(
     case 'risk':
       return (
         active &&
-        (p.kit.riskCount > 0 ||
+        (!!p.lifecycle?.failedCount ||
+          !!p.lifecycle?.overdueCount ||
+          p.kit.riskCount > 0 ||
           p.kit.alerts.some((a) => a.code !== 'PENDING_REPLY'))
       )
     case 'overdue':

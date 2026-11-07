@@ -58,11 +58,9 @@ export function navigationFor(role: string): Array<ModuleId> {
   return [
     'dashboard',
     'projects',
-    'bom',
     'manufacturing',
     'purchasing',
-    'reports',
-    ...(role === 'admin' ? (['data', 'settings'] as const) : []),
+    ...(role === 'admin' ? (['settings'] as const) : []),
   ]
 }
 export const stageLabels: Record<string, string> = {
@@ -70,7 +68,8 @@ export const stageLabels: Record<string, string> = {
   manufacturing: '制造准备',
   prototype: '样机制作',
   test: '样机试验',
-  completed: '完成',
+  trial: '客户试用',
+  completed: '定型结项',
 }
 export const stateLabels: Record<string, string> = {
   pending_reply: '待回复',

@@ -19,15 +19,13 @@ await migrate(db, { migrationsFolder: 'migrations' })
 const admin = crypto.randomUUID(),
   email = admin + '@ui.test.invalid',
   password = 'Admin-' + crypto.randomUUID()
-await db
-  .insert(users)
-  .values({
-    id: admin,
-    name: '回归管理员',
-    email,
-    passwordHash: await hashPassword(password),
-    mustChangePassword: false,
-  })
+await db.insert(users).values({
+  id: admin,
+  name: '回归管理员',
+  email,
+  passwordHash: await hashPassword(password),
+  mustChangePassword: false,
+})
 await db.insert(npiUserRoles).values({ userId: admin, role: 'admin' })
 mkdirSync('runtime/test-evidence', { recursive: true })
 const root = 'http://localhost:3496',
@@ -125,7 +123,7 @@ try {
   })
   await phone.getByRole('link', { name: '进入工作空间 →', exact: true }).click()
   await expect(
-    phone.getByRole('heading', { name: '我的采购件', exact: true }),
+    phone.getByRole('heading', { name: '采购管理', exact: true }),
   ).toBeVisible()
   await page.getByRole('button', { name: '刷新账号', exact: true }).click()
   await expect(row).toContainText('已启用')
@@ -156,13 +154,23 @@ try {
     'PASS: actual login, integrated account creation, mobile forced password change, field validation, password reset, session revocation and logout.',
   )
   failed = false
- } catch(error) {
+} catch (error) {
   console.error(error)
-  for (const [i,context] of browser.contexts().entries()) {
-    const page=context.pages()[0]
-    if(page) {
-      await page.screenshot({path:'runtime/test-evidence/account-failure-'+i+'.png',fullPage:true}).catch(()=>{})
-      console.error(await page.locator('body').innerText().catch(()=>''))
+  for (const [i, context] of browser.contexts().entries()) {
+    const page = context.pages()[0]
+    if (page) {
+      await page
+        .screenshot({
+          path: 'runtime/test-evidence/account-failure-' + i + '.png',
+          fullPage: true,
+        })
+        .catch(() => {})
+      console.error(
+        await page
+          .locator('body')
+          .innerText()
+          .catch(() => ''),
+      )
     }
   }
   throw error

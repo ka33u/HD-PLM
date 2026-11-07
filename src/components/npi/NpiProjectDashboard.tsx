@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { stageLabels } from './navigation'
 import { projectTitle } from '../../lib/npi/project-identity'
 import { useMemo, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
@@ -16,13 +17,7 @@ import { NpiAssignedMaterials } from './NpiAssignedMaterials'
 import type { ProjectFilter } from '../../lib/npi/project-dashboard'
 import type { NpiDashboard, NpiMetadata } from '../../lib/npi/service'
 
-const stages: Record<string, string> = {
-  design: '设计中',
-  manufacturing: '制造准备',
-  prototype: '样机制作',
-  test: '样机试验',
-  completed: '完成',
-}
+const stages = stageLabels
 const statuses: Record<string, string> = {
   pending_reply: '待回复',
   normal: '正常',
@@ -147,7 +142,17 @@ export function NpiProjectDashboard({
                     {p.code} · {p.motorModel}
                   </small>
                 </td>
-                <td data-label="当前阶段">{stages[p.currentNpiStage]}</td>
+                <td data-label="当前阶段">
+                  {stages[p.currentNpiStage]}
+                  {p.lifecycle?.pendingCount > 0 && (
+                    <small>流程待办 {p.lifecycle.pendingCount} 项</small>
+                  )}
+                  {!!p.lifecycle?.overdueCount && (
+                    <small className="npi-warning-text">
+                      流程逾期 {p.lifecycle.overdueCount} 项
+                    </small>
+                  )}
+                </td>
                 <td data-label="样机要求">
                   <span className="npi-date">{p.prototypeRequiredDate}</span>
                 </td>
@@ -183,6 +188,16 @@ export function NpiProjectDashboard({
                               : '未计入按期完成'}
                         </small>
                       </>
+                    ) : p.lifecycle?.overdueCount ||
+                      p.lifecycle?.failedCount ? (
+                      <button
+                        className="npi-project-link"
+                        onClick={() => onOpen(p.id)}
+                      >
+                        {p.lifecycle.overdueCount
+                          ? `流程跟进逾期 · ${p.lifecycle.nextDate}`
+                          : '流程结论未通过，待整改复核'}
+                      </button>
                     ) : (
                       <>
                         <button

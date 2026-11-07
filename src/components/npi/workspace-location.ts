@@ -26,13 +26,19 @@ export function readWorkspaceLocation(
       location.pathname === '/npi/trash'
         ? ('trash' as const)
         : view && Object.hasOwn(moduleInfo, view)
-          ? (view as ModuleId)
+          ? view === 'bom'
+            ? 'projects'
+            : view === 'reports'
+              ? 'dashboard'
+              : (view as ModuleId)
           : null,
     projectId: project && uuid.test(project) ? project : null,
     itemId: item && uuid.test(item) ? item : undefined,
     tab: projectTabs.includes(tab as ProjectTab)
       ? (tab as ProjectTab)
-      : ('overview' as const),
+      : view === 'bom' && project
+        ? ('bom' as const)
+        : ('overview' as const),
   }
 }
 export function projectLocation(

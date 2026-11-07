@@ -1,3 +1,5 @@
+import { lifecycleDefinitions, resultLabels } from '../../lib/npi/lifecycle'
+import type { LifecycleKind } from '../../lib/npi/lifecycle'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ClipboardList } from 'lucide-react'
 import { eventLabels } from '../../lib/npi/event-labels'
@@ -47,6 +49,19 @@ export function NpiProjectEventDetail({ event: e }: { event: ProjectEvent }) {
         {e.action === 'MANUFACTURING_EXCEPTION_REPORTED' &&
           typeof detail.committedDate === 'string' && (
             <p>预计完成：{detail.committedDate}</p>
+          )}
+        {e.action.startsWith('LIFECYCLE_') && (
+          <LifecycleAuditDetail detail={detail} />
+        )}
+        {e.action === 'FILE_UPLOADED' &&
+          typeof detail.analysis === 'string' &&
+          !!detail.analysis && (
+            <details>
+              <summary>
+                报告分析 · {resultLabels[String(detail.conclusion)]}
+              </summary>
+              <p style={{ whiteSpace: 'pre-wrap' }}>{detail.analysis}</p>
+            </details>
           )}
         <ProjectChangeDetail action={e.action} detail={e.detail} />
         <InheritanceDetail action={e.action} detail={e.detail} />
@@ -153,5 +168,48 @@ function ProjectChangeDetail({
         {change.issues.length} 项
       </p>
     </div>
+  )
+}
+
+function LifecycleAuditDetail({ detail }: { detail: Record<string, unknown> }) {
+  const before = record(detail.before),
+    after = record(detail.after),
+    kind = String(detail.kind) as LifecycleKind
+  if (!lifecycleDefinitions[kind]) return null
+  const previous = record(record(before.data).fields),
+    current = record(record(after.data).fields)
+  const labels = Object.fromEntries([
+    ...lifecycleDefinitions[kind].fields.map((f) => [f.key, f.label]),
+    ['summary', '分析与结论'],
+    ['followUpDate', '下次跟进日期'],
+    ['nextAction', '后续措施'],
+    ['waiverReason', '不适用说明'],
+    ['customerConfirmation', '客户确认结果'],
+  ])
+  return (
+    <details>
+      <summary>
+        {lifecycleDefinitions[kind].label} ·{' '}
+        {resultLabels[String(after.result || '')]} · 查看变更内容
+      </summary>
+      <p>
+        计划日期：{String(after.plannedDate || before.plannedDate || '未填')} ·
+        实际日期：
+        {String(after.performedDate || before.performedDate || '未填')}
+      </p>
+      {Object.keys(labels)
+        .filter((k) => current[k] || previous[k])
+        .map((k) => (
+          <p key={k}>
+            <strong>{labels[k]}</strong>：
+            {previous[k] !== current[k] && previous[k] ? (
+              <>
+                <del>{String(previous[k])}</del> →{' '}
+              </>
+            ) : null}
+            {String(current[k] || previous[k] || '')}
+          </p>
+        ))}
+    </details>
   )
 }

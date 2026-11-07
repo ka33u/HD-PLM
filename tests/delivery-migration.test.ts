@@ -15,6 +15,14 @@ const journal = JSON.parse(
 journal.entries = journal.entries.filter((e: any) => e.idx < 3)
 writeFileSync(join(folder, 'meta/_journal.json'), JSON.stringify(journal))
 const f = await deliveryFixture('hd_delivery_upgrade', folder)
+// The current API reads lifecycle metadata while this fixture targets the older
+// delivery migration. Temporarily add the empty additive schema for fixture creation,
+// then remove it before the real upgrade so migration 0005 is also exercised.
+for (const q of readFileSync(
+  'migrations/0005_robust_whizzer.sql',
+  'utf8',
+).split('--> statement-breakpoint'))
+  if (q.trim()) await f.db.execute(sql.raw(q))
 try {
   await test('Upgrading existing four-node projects retains identities/history and fills all current BOM tasks exactly once', async () => {
     const id = await f.project(),
@@ -41,7 +49,16 @@ try {
     await f.db.execute(
       sql`delete from npi_tracking_items where program_id=${orphan}`,
     )
+    await f.db.execute(
+      sql`alter table npi_attachments drop column lifecycle_record_id, drop column analysis, drop column conclusion`,
+    )
+    await f.db.execute(sql`drop table npi_lifecycle_records`)
     await migrate(f.db, { migrationsFolder: 'migrations' })
+    assert.equal(
+      (await f.db.select().from(f.s.npiLifecycleRecords)).length,
+      0,
+      'upgrade never fabricates historical conclusions',
+    )
     let upgraded = await f.detail(id)
     const w = upgraded.items.find((i: any) => i.id === whole.id)
     assert.equal(w.sourceType, 'WHOLE_MACHINE')

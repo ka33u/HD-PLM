@@ -1,3 +1,4 @@
+import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
@@ -345,7 +346,8 @@ try {
     )
   })
   await test('All tasks must complete before closure; archived nodes are not required and the closed project is read-only', async () => {
-    for (const next of ['manufacturing', 'prototype', 'test']) {
+    await seedLifecycleForLegacyTests(db, f.s, id)
+    for (const next of ['manufacturing', 'prototype', 'test', 'trial']) {
       const d = await detail(id)
       await call('technical', `/projects/${id}/stage`, 'PATCH', {
         currentNpiStage: next,
@@ -359,7 +361,7 @@ try {
       `/projects/${id}/stage`,
       'PATCH',
       { currentNpiStage: 'completed', expectedVersion: d.version },
-      400,
+      409,
     )
     for (const [role, kind] of [
       ['peer', 'manufacturing'],

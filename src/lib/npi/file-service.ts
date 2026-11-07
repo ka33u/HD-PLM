@@ -3,18 +3,28 @@ import { ownsWork } from './work-ownership'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { users } from '../db/schema/users'
 import * as s from '../db/schema/npi'
 import { NpiError, textValue } from './domain'
 import { validatedFile } from './file-validation'
 import { MAX_NPI_FILE_BYTES } from './file-types'
-import { event, getActor, loadProject, uuidValue } from './service'
+import {
+  event,
+  getActor,
+  loadProject,
+  uuidValue,
+  versionCheck,
+} from './service'
+import { requireLifecycleOwner } from './lifecycle-service'
 import type { Actor } from './service'
 import type { TransactionClient } from '../db'
 type Run = TransactionClient | typeof db
-export type FileScope = { kind: 'project' | 'tracking' | 'issue'; id: string }
+export type FileScope = {
+  kind: 'project' | 'tracking' | 'issue' | 'lifecycle'
+  id: string
+}
 const deny = () => {
   throw new NpiError('NPI_PERMISSION_DENIED', '无权访问此资料', 403)
 }
@@ -22,7 +32,7 @@ const missing = () => {
   throw new NpiError('FILE_NOT_FOUND', '资料不存在或已不可用', 404)
 }
 export function fileScope(kind: string, id: string): FileScope {
-  if (!['project', 'tracking', 'issue'].includes(kind))
+  if (!['project', 'tracking', 'issue', 'lifecycle'].includes(kind))
     throw new NpiError('VALIDATION_ERROR', '资料归属无效')
   return { kind: kind as FileScope['kind'], id: uuidValue(id) }
 }
@@ -55,6 +65,14 @@ async function access(
       ['material', 'other', 'assembly'].includes(t.trackingType) &&
       ownsWork(actor, t.ownerId)
     active = t.trackingEnabled || t.affectsKit
+  } else if (scope.kind === 'lifecycle') {
+    const [r] = await run
+      .select()
+      .from(s.npiLifecycleRecords)
+      .where(eq(s.npiLifecycleRecords.id, scope.id))
+    if (!r) return missing()
+    programId = r.programId
+    active = r.status === 'draft'
   } else if (scope.kind === 'issue') {
     const [r] = await run
       .select()
@@ -83,6 +101,7 @@ async function access(
     if (edit && project.currentNpiStage === 'completed')
       throw new NpiError('INVALID_STATE_TRANSITION', '已完成项目为只读', 400)
   } else project = await loadProject(run, programId, actor, edit)
+  if (edit && scope.kind === 'lifecycle') requireLifecycleOwner(actor, project)
   if (edit) {
     const latest = await access(run, actor, scope)
     if (latest.programId !== programId) return deny()
@@ -98,6 +117,7 @@ async function access(
     programId,
     project,
     canArchive:
+      (scope.kind !== 'lifecycle' || actor.id === project.technicalOwnerId) &&
       project.currentNpiStage !== 'completed' &&
       active &&
       (actor.role === 'admin' ||
@@ -105,6 +125,7 @@ async function access(
           (ownsWork(actor, project.technicalOwnerId) ||
             ownsWork(actor, project.manufacturingOwnerId)))),
     canUpload:
+      (scope.kind !== 'lifecycle' || actor.id === project.technicalOwnerId) &&
       actor.role !== 'supervisor' &&
       project.currentNpiStage !== 'completed' &&
       active,
@@ -113,13 +134,16 @@ async function access(
 const condition = (scope: FileScope) =>
   scope.kind === 'tracking'
     ? eq(s.npiAttachments.trackingItemId, scope.id)
-    : scope.kind === 'issue'
-      ? eq(s.npiAttachments.issueId, scope.id)
-      : and(
-          eq(s.npiAttachments.programId, scope.id),
-          isNull(s.npiAttachments.trackingItemId),
-          isNull(s.npiAttachments.issueId),
-        )
+    : scope.kind === 'lifecycle'
+      ? eq(s.npiAttachments.lifecycleRecordId, scope.id)
+      : scope.kind === 'issue'
+        ? eq(s.npiAttachments.issueId, scope.id)
+        : and(
+            eq(s.npiAttachments.programId, scope.id),
+            isNull(s.npiAttachments.trackingItemId),
+            isNull(s.npiAttachments.issueId),
+            isNull(s.npiAttachments.lifecycleRecordId),
+          )
 
 export function attachmentPath(key: string) {
   if (!/^[a-f0-9-]{36}\.(pdf|png|jpg|jpeg|webp|docx|xlsx)$/.test(key))
@@ -139,6 +163,8 @@ const summary = (r: Row) => ({
   size: r.file.size,
   mimeType: r.file.mimeType,
   category: r.file.category,
+  analysis: r.file.analysis,
+  conclusion: r.file.conclusion,
   uploader: r.uploader,
   createdAt: r.file.createdAt,
   archivedAt: r.file.archivedAt,
@@ -177,17 +203,33 @@ export async function uploadFile(
     : f.name.slice(0, 200)
   const category = input.category
   if (
-    !(scope.kind === 'project'
-      ? category === 'technical'
-      : scope.kind === 'issue'
-        ? category === 'issue'
-        : ['technical', 'receipt'].includes(String(category)))
+    !(scope.kind === 'lifecycle'
+      ? ['report', 'evidence'].includes(String(category))
+      : scope.kind === 'project'
+        ? category === 'technical'
+        : scope.kind === 'issue'
+          ? category === 'issue'
+          : ['technical', 'receipt'].includes(String(category)))
   )
     throw new NpiError('VALIDATION_ERROR', '资料分类与归属不匹配')
+  const analysis =
+    category === 'report' ? textValue(input.analysis, '报告分析', 8000) : ''
+  const conclusion = category === 'report' ? String(input.conclusion || '') : ''
+  if (
+    category === 'report' &&
+    !['pass', 'fail', 'continue'].includes(conclusion)
+  )
+    throw new NpiError('VALIDATION_ERROR', '上传报告时必须明确报告结论')
   const requestId = uuidValue(input.requestId),
     fileHash = createHash('sha256').update(bytes).digest('hex')
   const requestHash = createHash('sha256')
-    .update(JSON.stringify([scope, title, category, f.name, fileHash]))
+    .update(
+      JSON.stringify(
+        scope.kind === 'lifecycle'
+          ? [scope, title, category, f.name, fileHash, analysis, conclusion]
+          : [scope, title, category, f.name, fileHash],
+      ),
+    )
     .digest('hex')
   const id = randomUUID(),
     storageKey = id + '.' + f.ext,
@@ -219,6 +261,18 @@ export async function uploadFile(
           )
         return summary(existing)
       }
+      if (scope.kind === 'lifecycle') {
+        const [record] = await tx
+          .select()
+          .from(s.npiLifecycleRecords)
+          .where(eq(s.npiLifecycleRecords.id, scope.id))
+        versionCheck(
+          record!.version,
+          input.expectedRecordVersion === undefined
+            ? undefined
+            : Number(input.expectedRecordVersion),
+        )
+      }
       await mkdir(
         resolve(process.env.ATTACHMENT_ROOT || './runtime/attachments'),
         { recursive: true, mode: 0o700 },
@@ -230,22 +284,42 @@ export async function uploadFile(
         programId: permission.programId,
         trackingItemId: scope.kind === 'tracking' ? scope.id : null,
         issueId: scope.kind === 'issue' ? scope.id : null,
+        lifecycleRecordId: scope.kind === 'lifecycle' ? scope.id : null,
+        analysis,
+        conclusion,
         name: f.name,
         title,
         size: bytes.length,
         mimeType: f.mime,
         fileHash,
         storageKey,
-        category: category as 'technical' | 'receipt' | 'issue',
+        category: category as
+          'technical' | 'receipt' | 'issue' | 'report' | 'evidence',
         requestId,
         requestHash,
         uploadedBy: actor.id,
       })
+      if (scope.kind === 'lifecycle') {
+        await tx
+          .update(s.npiLifecycleRecords)
+          .set({
+            version: sql`${s.npiLifecycleRecords.version} + 1`,
+            updatedBy: actor.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(s.npiLifecycleRecords.id, scope.id))
+        await tx
+          .update(s.npiProjects)
+          .set({ version: sql`${s.npiProjects.version} + 1` })
+          .where(eq(s.npiProjects.programId, permission.programId))
+      }
       await event(tx, actor, permission.programId, scope.id, 'FILE_UPLOADED', {
         linkId: id,
         fileName: f.name,
         category,
         fileHash,
+        analysis,
+        conclusion,
       })
       const [r] = await query(tx).where(eq(s.npiAttachments.id, id))
       return summary(r!)
@@ -267,11 +341,13 @@ export async function uploadFile(
   }
 }
 const scopeOf = (r: Row): FileScope =>
-  r.file.trackingItemId
-    ? { kind: 'tracking', id: r.file.trackingItemId }
-    : r.file.issueId
-      ? { kind: 'issue', id: r.file.issueId }
-      : { kind: 'project', id: r.file.programId }
+  r.file.lifecycleRecordId
+    ? { kind: 'lifecycle', id: r.file.lifecycleRecordId }
+    : r.file.trackingItemId
+      ? { kind: 'tracking', id: r.file.trackingItemId }
+      : r.file.issueId
+        ? { kind: 'issue', id: r.file.issueId }
+        : { kind: 'project', id: r.file.programId }
 export async function downloadFile(userId: string, id: string) {
   const [r] = await query(db).where(eq(s.npiAttachments.id, uuidValue(id)))
   if (!r) return missing()
@@ -311,6 +387,25 @@ export async function archiveFile(
     const permission = await access(tx, actor, scopeOf(r), true)
     if (!permission.canArchive || permission.programId !== r.file.programId)
       return deny()
+    if (r.file.lifecycleRecordId) {
+      const [record] = await tx
+        .select()
+        .from(s.npiLifecycleRecords)
+        .where(eq(s.npiLifecycleRecords.id, r.file.lifecycleRecordId))
+      versionCheck(record!.version, input.expectedRecordVersion)
+      await tx
+        .update(s.npiLifecycleRecords)
+        .set({
+          version: record!.version + 1,
+          updatedBy: actor.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(s.npiLifecycleRecords.id, record!.id))
+      await tx
+        .update(s.npiProjects)
+        .set({ version: sql`${s.npiProjects.version} + 1` })
+        .where(eq(s.npiProjects.programId, r.file.programId))
+    }
     const reason = textValue(input.reason, '归档原因', 2000)
     const [updated] = await tx
       .update(s.npiAttachments)

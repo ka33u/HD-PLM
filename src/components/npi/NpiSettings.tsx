@@ -25,6 +25,9 @@ export function NpiSettings({
   onChanged: () => Promise<void>
   onTemplate: (template?: Template) => void
 }) {
+  const [activeTab, setActiveTab] = useState(
+    section === 'templates' ? 'templates' : 'users',
+  )
   const [templateQuery, setTemplateQuery] = useState('')
   const [templateStatus, setTemplateStatus] = useState('all')
   const templateStart = useRef<HTMLDivElement>(null)
@@ -48,30 +51,30 @@ export function NpiSettings({
         <div>
           <h1>
             {section === 'all'
-              ? '模板与岗位'
+              ? '系统设置'
               : section === 'templates'
                 ? '基础数据'
                 : '系统设置'}
           </h1>
           <p>
             {section === 'all'
-              ? '维护ERP导入格式和NPI业务岗位。'
+              ? '管理账号、部门协作、基础数据与导入模板。'
               : moduleInfo[section === 'templates' ? 'data' : 'settings']
                   .description}
           </p>
         </div>
-        {section !== 'users' && (
+        {activeTab === 'templates' && (
           <button className="npi-button" onClick={() => onTemplate()}>
             <Plus size={17} />
             新建导入模板
           </button>
         )}
       </div>
-      <Tabs defaultValue={section === 'users' ? 'users' : 'templates'}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         {section === 'all' && (
           <TabsList aria-label="配置分类">
-            <TabsTrigger value="templates">导入模板</TabsTrigger>
-            <TabsTrigger value="users">业务岗位</TabsTrigger>
+            <TabsTrigger value="templates">基础配置</TabsTrigger>
+            <TabsTrigger value="users">账号与部门</TabsTrigger>
           </TabsList>
         )}
         <TabsContent value="templates">

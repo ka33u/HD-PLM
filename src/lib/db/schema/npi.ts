@@ -18,6 +18,11 @@ import { projects } from './projects'
 import { users } from './users'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { BomPreview, BomRow, ImportTemplate } from '../../npi/bom'
+import type {
+  LifecycleData,
+  LifecycleKind,
+  LifecycleResult,
+} from '../../npi/lifecycle'
 import type { NpiStage } from '../../npi/domain'
 
 const created = () =>
@@ -294,6 +299,42 @@ export const npiIssueHistory = pgTable('npi_issue_history', {
     .notNull()
     .defaultNow(),
 })
+export const npiLifecycleRecords = pgTable(
+  'npi_lifecycle_records',
+  {
+    id: uuid('id').primaryKey(),
+    programId: uuid('program_id')
+      .notNull()
+      .references(() => npiProjects.programId, { onDelete: 'restrict' }),
+    kind: varchar('kind', { length: 30 }).$type<LifecycleKind>().notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    plannedDate: date('planned_date'),
+    performedDate: date('performed_date'),
+    status: varchar('status', { length: 30 })
+      .$type<'draft' | 'submitted' | 'cancelled'>()
+      .notNull()
+      .default('draft'),
+    result: varchar('result', { length: 30 })
+      .$type<LifecycleResult>()
+      .notNull()
+      .default(''),
+    data: jsonb('data').$type<LifecycleData>().notNull(),
+    issueId: uuid('issue_id').references(() => npiIssues.id),
+    version: integer('version').notNull().default(1),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    updatedBy: uuid('updated_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: created(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  },
+  (t) => [index('npi_lifecycle_project').on(t.programId, t.kind, t.createdAt)],
+)
 export const npiAttachments = pgTable(
   'npi_attachments',
   {
@@ -305,6 +346,11 @@ export const npiAttachments = pgTable(
       () => npiTrackingItems.id,
     ),
     issueId: uuid('issue_id').references(() => npiIssues.id),
+    lifecycleRecordId: uuid('lifecycle_record_id').references(
+      () => npiLifecycleRecords.id,
+    ),
+    analysis: text('analysis').notNull().default(''),
+    conclusion: varchar('conclusion', { length: 30 }).notNull().default(''),
     name: text('name').notNull(),
     title: text('title').notNull(),
     size: integer('size').notNull(),
@@ -312,7 +358,7 @@ export const npiAttachments = pgTable(
     fileHash: text('file_hash').notNull(),
     storageKey: text('storage_key').notNull().unique(),
     category: varchar('category', { length: 30 })
-      .$type<'technical' | 'receipt' | 'issue'>()
+      .$type<'technical' | 'receipt' | 'issue' | 'report' | 'evidence'>()
       .notNull(),
     requestId: uuid('request_id').notNull(),
     requestHash: text('request_hash').notNull(),

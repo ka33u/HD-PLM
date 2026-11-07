@@ -1,3 +1,8 @@
+import { lifecycleSummary } from './lifecycle'
+import {
+  requireLifecycleGate,
+  requireLifecycleOwner,
+} from './lifecycle-service'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { listMotorTypes, validateMotorType } from './motor-types'
 import { ensureBomDeliveryTasks } from './delivery-tasks'
@@ -370,7 +375,9 @@ function projectSnapshot(
   issueRows: Array<ProjectIssueRow>,
   activeRowCount: number,
   motorCode: string,
+  lifecycleRecords: Array<typeof s.npiLifecycleRecords.$inferSelect> = [],
 ) {
+  const lifecycle = lifecycleSummary(lifecycleRecords, p.currentNpiStage)
   const items = rows.map(
     ({ item, ownerName, bomRow, bomVersionNo, bomImportId }) => ({
       ...item,
@@ -435,9 +442,11 @@ function projectSnapshot(
   const riskStatus =
     p.currentNpiStage === 'completed'
       ? 'completed'
-      : kit.overdueCount
+      : kit.overdueCount || lifecycle.overdueCount
         ? 'overdue'
-        : kit.riskCount || kit.alerts.some((a) => a.code !== 'PENDING_REPLY')
+        : lifecycle.failedCount ||
+            kit.riskCount ||
+            kit.alerts.some((a) => a.code !== 'PENDING_REPLY')
           ? 'risk'
           : kit.pendingReplyCount
             ? 'pending_reply'
@@ -446,6 +455,7 @@ function projectSnapshot(
     items,
     kit,
     riskStatus,
+    lifecycle,
     bomReviewCount,
     criticalIssueCount,
     overdueIssueCount,
@@ -527,6 +537,14 @@ async function detailFor(tx: Tx | typeof db, p: Project) {
     issueRows,
     imports.find((i) => i.id === p.activeBomImportId)?.rowCount || 0,
     readProjectProfile(program).motorCode,
+    await tx
+      .select()
+      .from(s.npiLifecycleRecords)
+      .where(eq(s.npiLifecycleRecords.programId, p.programId))
+      .orderBy(
+        desc(s.npiLifecycleRecords.createdAt),
+        desc(s.npiLifecycleRecords.id),
+      ),
   )
   return {
     ...p,
@@ -595,6 +613,20 @@ export async function dashboard(userId: string) {
             .from(projectRecords)
             .where(inArray(projectRecords.id, ids))
         : []
+      const processRecords = ids.length
+        ? await tx
+            .select()
+            .from(s.npiLifecycleRecords)
+            .where(inArray(s.npiLifecycleRecords.programId, ids))
+            .orderBy(
+              desc(s.npiLifecycleRecords.createdAt),
+              desc(s.npiLifecycleRecords.id),
+            )
+        : []
+      const processesByProject = groupByProject(
+        processRecords,
+        (r) => r.programId,
+      )
       const trackingRows = ids.length
         ? await tx
             .select(trackingSelection)
@@ -704,6 +736,7 @@ export async function dashboard(userId: string) {
             issuesByProject.get(p.programId) || [],
             imports.find((i) => i.id === p.activeBomImportId)?.rowCount || 0,
             readProjectProfile(program).motorCode,
+            processesByProject.get(p.programId) || [],
           ),
         }
       })
@@ -1683,9 +1716,11 @@ export async function changeStage(
     const a = await getActor(userId, tx, true),
       p = await loadProject(tx, id, a, true)
     versionCheck(p.version, input.expectedVersion)
+    requireLifecycleOwner(a, p)
     const next = input.currentNpiStage as NpiStage
     if (stages.indexOf(next) !== stages.indexOf(p.currentNpiStage) + 1)
-      throw new NpiError('INVALID_STATE_TRANSITION', '请按五阶段顺序推进', 400)
+      throw new NpiError('INVALID_STATE_TRANSITION', '请按六阶段顺序推进', 400)
+    await requireLifecycleGate(tx, p)
     const changes: Partial<Project> = {
       currentNpiStage: next,
       version: p.version + 1,

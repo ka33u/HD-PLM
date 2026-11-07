@@ -1,3 +1,4 @@
+import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import 'dotenv/config'
 import test from 'node:test'
@@ -1698,6 +1699,8 @@ try {
     )
   })
   await test('Planning handoff and completion correction retain promises and audit, revoke old ownership, and enforce project controls', async () => {
+    const future = (days: number) =>
+      new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
     // The earlier inactive-account test revoked this session; sign in again for handoff checks.
     accounts.otherBuyer!.token = (
       await SessionManager.createSession(accounts.otherBuyer!.id)
@@ -1711,8 +1714,8 @@ try {
         motorModel: 'AMENDMENT-TEST',
         technicalOwnerId: accounts.technical!.id,
         manufacturingOwnerId: accounts.manufacturing!.id,
-        requiredKitDate: '2026-10-15',
-        prototypeRequiredDate: '2026-10-20',
+        requiredKitDate: future(5),
+        prototypeRequiredDate: future(10),
       },
       201,
     )
@@ -1725,7 +1728,7 @@ try {
         name: '交接采购件',
         qty: '2',
         ownerId: accounts.procurement!.id,
-        requiredDate: '2026-10-15',
+        requiredDate: future(5),
         affectsKit: true,
       },
       201,
@@ -1736,7 +1739,7 @@ try {
       'POST',
       {
         expectedVersion: item.version,
-        committedDate: '2026-10-18',
+        committedDate: future(8),
       },
     )
     const plan = `/tracking/${item.id}/plan`
@@ -1744,7 +1747,7 @@ try {
     const payload = {
       expectedVersion: replied.version,
       ownerId: accounts.otherBuyer!.id,
-      requiredDate: '2026-10-20',
+      requiredDate: future(10),
       reason: '采购交接与客户计划调整',
     }
     for (const role of ['procurement', 'otherBuyer', 'otherTech']) {
@@ -1788,8 +1791,8 @@ try {
       400,
     )
     const changed = await call('technical', plan, 'PATCH', payload)
-    assert.equal(changed.firstCommittedDate, '2026-10-18')
-    assert.equal(changed.currentCommittedDate, '2026-10-18')
+    assert.equal(changed.firstCommittedDate, future(8))
+    assert.equal(changed.currentCommittedDate, future(8))
     assert.equal(changed.ownerId, accounts.otherBuyer!.id)
     assert.equal(changed.status, 'normal')
     assert.equal(
@@ -1835,7 +1838,7 @@ try {
     )
     assert.equal(audit.length, 1)
     assert.equal(audit[0].detail.before.ownerId, accounts.procurement!.id)
-    assert.equal(audit[0].detail.after.requiredDate, '2026-10-20')
+    assert.equal(audit[0].detail.after.requiredDate, future(10))
     assert.equal(audit[0].actorId, accounts.technical!.id)
     const completed = await call(
       'otherBuyer',
@@ -1873,7 +1876,7 @@ try {
     const fixed = await call('manufacturing', correction, 'POST', correct)
     assert.equal(fixed.actualCompleteDate, '2026-09-02')
     assert.equal(fixed.status, 'completed')
-    assert.equal(fixed.firstCommittedDate, '2026-10-18')
+    assert.equal(fixed.firstCommittedDate, future(8))
     await call('technical', correction, 'POST', correct, 409)
     const noChange = await call('technical', correction, 'POST', {
       ...correct,
@@ -1899,7 +1902,18 @@ try {
       expectedVersion: whole.version,
       actualCompleteDate: '2026-09-01',
     })
-    for (const stage of ['manufacturing', 'prototype', 'test', 'completed'])
+    await seedLifecycleForLegacyTests(
+      drizzle(client),
+      await import('../src/lib/db/schema/npi'),
+      p.id,
+    )
+    for (const stage of [
+      'manufacturing',
+      'prototype',
+      'test',
+      'trial',
+      'completed',
+    ])
       await call('technical', `/projects/${p.id}/stage`, 'PATCH', {
         expectedVersion: (await detail()).version,
         currentNpiStage: stage,

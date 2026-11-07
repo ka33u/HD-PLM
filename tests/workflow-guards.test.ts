@@ -1,3 +1,4 @@
+import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Real requests against a fresh isolated database; no formal project is touched.
 import 'dotenv/config'
@@ -457,8 +458,9 @@ try {
     assert.equal((await detail()).bomReviewCount, 2)
   })
 
-  await test('Five-stage completion preserves existing gates, retires obsolete work and leaves successful completion retries harmless', async () => {
-    for (const stage of ['manufacturing', 'prototype', 'test']) {
+  await test('Six-stage completion preserves existing gates, retires obsolete work and leaves successful completion retries harmless', async () => {
+    await seedLifecycleForLegacyTests(db, s, projectId)
+    for (const stage of ['manufacturing', 'prototype', 'test', 'trial']) {
       const current = await detail()
       await call(
         'supervisor',
@@ -488,7 +490,7 @@ try {
       },
       409,
     )
-    assert.equal((await detail()).currentNpiStage, 'test')
+    assert.equal((await detail()).currentNpiStage, 'trial')
     const review = await call(
       'technical',
       `/projects/${projectId}/bom/reconciliation`,

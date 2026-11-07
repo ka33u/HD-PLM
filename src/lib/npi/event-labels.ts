@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const eventLabels: Record<string, string> = {
+  LIFECYCLE_SAVED: '保存流程记录',
+  LIFECYCLE_SUBMITTED: '提交流程结论',
+  LIFECYCLE_CANCELLED: '取消流程草稿',
   PROJECT_TRASHED: '项目移入回收站',
   PROJECT_RESTORED: '恢复项目',
   PROJECT_CREATED: '创建新品项目',
@@ -33,6 +36,10 @@ export const eventLabels: Record<string, string> = {
   DETAILS_UPDATED: '补充供应商 / 备注',
 }
 export const eventGroups = {
+  lifecycle: {
+    label: '设计试验与试用',
+    actions: ['LIFECYCLE_SAVED', 'LIFECYCLE_SUBMITTED', 'LIFECYCLE_CANCELLED'],
+  },
   promises: {
     label: '承诺回复',
     actions: [

@@ -13,6 +13,7 @@ export const stages = [
   'manufacturing',
   'prototype',
   'test',
+  'trial',
   'completed',
 ] as const
 export type NpiStage = (typeof stages)[number]
