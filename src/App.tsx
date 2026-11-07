@@ -4,6 +4,7 @@ import { request, useAccount } from '@/lib/auth/context'
 import { NpiWorkspace } from './components/npi/NpiWorkspace'
 import { AccountManager } from './components/accounts/AccountManager'
 import { FirstRunSetup } from './components/accounts/FirstRunSetup'
+import { Register } from './components/accounts/Register'
 import type { FormEvent } from 'react'
 import { loginReturnTo } from './lib/auth/return-to'
 
@@ -13,12 +14,22 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [savedEmail] = useState(() => {
     try {
-      return localStorage.getItem('npi-login-email') || ''
+      return (
+        sessionStorage.getItem('npi-registered-email') ||
+        localStorage.getItem('npi-login-email') ||
+        ''
+      )
     } catch {
       return ''
     }
   })
-  const [rememberEmail, setRememberEmail] = useState(!!savedEmail)
+  const [rememberEmail, setRememberEmail] = useState(() => {
+    try {
+      return !!localStorage.getItem('npi-login-email')
+    } catch {
+      return false
+    }
+  })
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (busy) return
@@ -31,6 +42,7 @@ function Login() {
         password: f.get('password'),
       })
       try {
+        sessionStorage.removeItem('npi-registered-email')
         if (rememberEmail)
           localStorage.setItem(
             'npi-login-email',
@@ -66,7 +78,7 @@ function Login() {
       <main className="login-card">
         <p className="eyebrow">NPI WORKSPACE</p>
         <h2>登录工作空间</h2>
-        <p className="muted">使用管理员开通的账号，登录后回到当前项目。</p>
+        <p className="muted">使用已开通的账号，登录后回到当前项目。</p>
         <form onSubmit={(e) => void submit(e)}>
           <fieldset disabled={busy}>
             <label>
@@ -124,6 +136,14 @@ function Login() {
           </fieldset>
         </form>
         <p className="muted small">忘记密码请联系本系统管理员重置。</p>
+        <a
+          className="auth-switch"
+          href={
+            '/register?redirect=' + encodeURIComponent(loginReturnTo(location))
+          }
+        >
+          没有账号？注册新用户
+        </a>
       </main>
     </div>
   )
@@ -275,7 +295,14 @@ export function App() {
         <button onClick={() => void reload()}>重试</button>
       </main>
     )
-  if (!user) return setup?.required ? <FirstRunSetup /> : <Login />
+  if (!user)
+    return setup?.required ? (
+      <FirstRunSetup />
+    ) : location.pathname === '/register' ? (
+      <Register />
+    ) : (
+      <Login />
+    )
   if (user.mustChangePassword || location.pathname === '/account')
     return <AccountPage />
   if (location.pathname === '/accounts') return <AccountManager />

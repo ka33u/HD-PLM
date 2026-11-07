@@ -8,6 +8,10 @@ import { changePassword } from '../../lib/auth/accounts'
 import { getActor } from '../../lib/npi/service'
 import { NpiError } from '../../lib/npi/domain'
 import { initializeAdministrator, setupStatus } from '../../lib/auth/setup'
+import {
+  registerAccount,
+  registrationOptions,
+} from '../../lib/auth/registration'
 
 const app = new Hono()
 function remoteAddress(c: Parameters<typeof getConnInfo>[0]) {
@@ -42,6 +46,15 @@ app.post('/login', async (c) => {
   const result = await login(await c.req.json(), remoteAddress(c) || 'local')
   sessionCookie(c, result.sessionToken)
   return c.json({ user: result.user })
+})
+app.get('/register', async (c) => c.json(await registrationOptions()))
+app.post('/register', async (c) => {
+  if (await validateRequestSession(c.req.raw))
+    throw new NpiError('ALREADY_SIGNED_IN', '已登录，请先退出账号再注册', 409)
+  return c.json(
+    await registerAccount(await c.req.json(), remoteAddress(c) || 'local'),
+    201,
+  )
 })
 app.get('/me', async (c) => {
   const session = await validateRequestSession(c.req.raw)

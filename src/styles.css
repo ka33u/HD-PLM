@@ -208,6 +208,7 @@ p {
   font-weight: 500;
 }
 .login-card input,
+.login-card select,
 .account-layout input,
 .account-layout select,
 .account-layout textarea,
@@ -240,6 +241,64 @@ p {
 }
 .login-card form {
   margin-top: 28px;
+}
+.register-card {
+  width: min(100%, 490px);
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+.register-card form {
+  margin-top: 20px;
+}
+.register-card label {
+  margin-bottom: 14px;
+}
+.register-departments {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.auth-switch {
+  display: block;
+  text-align: center;
+  padding: 12px 0;
+  color: #285caa;
+  font-weight: 600;
+}
+.account-registration-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .register-card input,
+  .register-card select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .register-page .login-intro {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+  .register-page .login-intro h1 {
+    display: none;
+  }
+  .register-page .wordmark {
+    margin-bottom: 0;
+  }
+  .register-card {
+    padding-top: 20px;
+  }
+  .register-departments {
+    gap: 8px;
+    min-width: 0;
+  }
+  .register-departments label,
+  .register-departments select {
+    min-width: 0;
+  }
 }
 .setup-card {
   width: min(100%, 490px);

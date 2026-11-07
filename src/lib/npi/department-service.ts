@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { users } from '../db/schema/users'
 import * as s from '../db/schema/npi'
+import { accountRegistrations } from '../db/schema/registrations'
 import { requireAdmin } from '../auth/accounts'
 import { event, uuidValue, versionCheck } from './service'
 import { NpiError, textValue } from './domain'
@@ -23,6 +24,13 @@ export async function listDepartments(userId: string) {
     })
     .from(users)
     .innerJoin(s.npiUserRoles, eq(s.npiUserRoles.userId, users.id))
+    .leftJoin(accountRegistrations, eq(accountRegistrations.userId, users.id))
+    .where(
+      or(
+        isNull(accountRegistrations.status),
+        eq(accountRegistrations.status, 'approved'),
+      ),
+    )
     .orderBy(asc(users.name))
   const events = await db
     .select({
@@ -76,9 +84,13 @@ export async function saveDepartment(
     versionCheck(old?.version || 0, input.expectedVersion)
     const name = textValue(input.name, '部门名称', 100),
       reason = textValue(input.reason, '变更原因', 2000)
-    if (!['manufacturing', 'procurement'].includes(String(input.role)))
-      throw new NpiError('VALIDATION_ERROR', '请选择制造或采购岗位')
-    const role = input.role as 'manufacturing' | 'procurement'
+    if (
+      !['technical', 'manufacturing', 'procurement'].includes(
+        String(input.role),
+      )
+    )
+      throw new NpiError('VALIDATION_ERROR', '请选择设计、生产或采购类别')
+    const role = input.role as 'technical' | 'manufacturing' | 'procurement'
     if (old && old.role !== role)
       throw new NpiError(
         'VALIDATION_ERROR',

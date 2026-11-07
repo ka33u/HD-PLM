@@ -3,6 +3,7 @@ import { eq, lt, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { accountEvents, loginLimits, users } from '../db/schema/users'
 import { npiUserRoles } from '../db/schema/npi'
+import { accountRegistrations } from '../db/schema/registrations'
 import { NpiError } from '../npi/domain'
 import { checkPassword, emailValue, hashPassword } from './accounts'
 import { createSession } from './session'
@@ -48,6 +49,19 @@ export async function login(input: Record<string, unknown>, address: string) {
       password,
     )
     const locked = user?.lockedUntil && user.lockedUntil.getTime() > Date.now()
+    if (user && valid && !locked && !user.active) {
+      const [registration] = await tx
+        .select()
+        .from(accountRegistrations)
+        .where(eq(accountRegistrations.userId, user.id))
+      if (registration && registration.status !== 'approved') {
+        await tx
+          .update(users)
+          .set({ failedAttempts: 0, lockedUntil: null })
+          .where(eq(users.id, user.id))
+        return { registrationStatus: registration.status }
+      }
+    }
     const [mapping] = user
       ? await tx
           .select()
@@ -98,6 +112,16 @@ export async function login(input: Record<string, unknown>, address: string) {
       'LOGIN_FAILED',
       '邮箱或密码不正确；连续10次失败会锁定15分钟',
       401,
+    )
+  if ('registrationStatus' in result)
+    throw new NpiError(
+      result.registrationStatus === 'pending'
+        ? 'REGISTRATION_PENDING'
+        : 'REGISTRATION_REJECTED',
+      result.registrationStatus === 'pending'
+        ? '注册申请已提交，等待管理员确认部门并开通账号'
+        : '注册申请未通过，请联系管理员核对部门信息',
+      403,
     )
   return result
 }

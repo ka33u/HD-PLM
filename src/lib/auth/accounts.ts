@@ -3,6 +3,8 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { accountEvents, sessions, users } from '../db/schema/users'
 import { npiUserRoles, npiDepartments } from '../db/schema/npi'
+import { accountRegistrations } from '../db/schema/registrations'
+import { alias } from 'drizzle-orm/pg-core'
 import { NpiError, textValue } from '../npi/domain'
 import { getActor, versionCheck } from '../npi/service'
 import type { TransactionClient } from '../db'
@@ -82,10 +84,23 @@ const fields = {
 }
 export async function listAccounts(actorId: string) {
   await requireAdmin(actorId)
+  const requestedDepartment = alias(npiDepartments, 'requested_department')
   return db
-    .select(fields)
+    .select({
+      ...fields,
+      departmentName: npiDepartments.name,
+      registrationStatus: accountRegistrations.status,
+      requestedDepartmentId: accountRegistrations.departmentId,
+      requestedDepartmentName: requestedDepartment.name,
+    })
     .from(users)
     .leftJoin(npiUserRoles, eq(npiUserRoles.userId, users.id))
+    .leftJoin(npiDepartments, eq(npiDepartments.id, npiUserRoles.departmentId))
+    .leftJoin(accountRegistrations, eq(accountRegistrations.userId, users.id))
+    .leftJoin(
+      requestedDepartment,
+      eq(requestedDepartment.id, accountRegistrations.departmentId),
+    )
     .orderBy(users.name, users.email)
 }
 export async function createAccount(
@@ -130,6 +145,16 @@ export async function updateAccount(
       .for('update', { of: users })
     if (!target) throw new NpiError('USER_NOT_FOUND', '账号不存在', 404)
     versionCheck(target.version, input.expectedVersion)
+    const [registration] = await tx
+      .select()
+      .from(accountRegistrations)
+      .where(eq(accountRegistrations.userId, targetId))
+    if (registration && registration.status !== 'approved')
+      throw new NpiError(
+        'REGISTRATION_REVIEW_REQUIRED',
+        '请先在审核注册中确认部门并开通账号',
+        409,
+      )
     const role = roleValue(input.role === undefined ? target.role : input.role)
     const active = input.active === undefined ? target.active : input.active
     if (typeof active !== 'boolean')

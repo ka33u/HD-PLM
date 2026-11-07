@@ -28,6 +28,8 @@ export function NpiSettings({
   const [activeTab, setActiveTab] = useState(
     section === 'templates' ? 'templates' : 'users',
   )
+  const [accountsRevision, setAccountsRevision] = useState(0)
+  const [departmentsRevision, setDepartmentsRevision] = useState(0)
   const [templateQuery, setTemplateQuery] = useState('')
   const [templateStatus, setTemplateStatus] = useState('all')
   const templateStart = useRef<HTMLDivElement>(null)
@@ -180,8 +182,16 @@ export function NpiSettings({
           )}
         </TabsContent>
         <TabsContent value="users">
-          <NpiDepartments api={api} />
-          <AccountManager embedded />
+          <NpiDepartments
+            api={api}
+            revision={departmentsRevision}
+            onChanged={() => setAccountsRevision((n) => n + 1)}
+          />
+          <AccountManager
+            embedded
+            revision={accountsRevision}
+            onChanged={() => setDepartmentsRevision((n) => n + 1)}
+          />
         </TabsContent>
       </Tabs>
     </>

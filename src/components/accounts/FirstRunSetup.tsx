@@ -48,7 +48,7 @@ export function FirstRunSetup() {
           </li>
           <li>
             <strong>邀请团队</strong>
-            <span>在系统设置中开通成员账号、分配岗位</span>
+            <span>邀请成员注册，或在系统设置中新增账号</span>
           </li>
           <li>
             <strong>开始协作</strong>

@@ -16,9 +16,15 @@ app.use('*', async (c, next) => {
 app.use('/assets/*', serveStatic({ root: './dist/client' }))
 app.get('*', async (c) => {
   if (
-    !['/', '/npi', '/npi/trash', '/login', '/account', '/accounts'].includes(
-      c.req.path,
-    )
+    ![
+      '/',
+      '/npi',
+      '/npi/trash',
+      '/login',
+      '/register',
+      '/account',
+      '/accounts',
+    ].includes(c.req.path)
   )
     return c.text('页面不存在', 404)
   try {

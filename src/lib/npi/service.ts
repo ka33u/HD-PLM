@@ -131,25 +131,29 @@ export async function getActor(
         .where(
           and(
             eq(s.npiDepartments.id, mapping.departmentId),
-            eq(s.npiDepartments.role, role as 'manufacturing'),
+            eq(
+              s.npiDepartments.role,
+              role as 'technical' | 'manufacturing' | 'procurement',
+            ),
           ),
         )
     : []
-  const peers = department
-    ? await tx
-        .select({ id: users.id })
-        .from(s.npiUserRoles)
-        .innerJoin(
-          users,
-          and(eq(users.id, s.npiUserRoles.userId), eq(users.active, true)),
-        )
-        .where(
-          and(
-            eq(s.npiUserRoles.departmentId, department.id),
-            eq(s.npiUserRoles.role, role),
-          ),
-        )
-    : []
+  const peers =
+    department && (role === 'manufacturing' || role === 'procurement')
+      ? await tx
+          .select({ id: users.id })
+          .from(s.npiUserRoles)
+          .innerJoin(
+            users,
+            and(eq(users.id, s.npiUserRoles.userId), eq(users.active, true)),
+          )
+          .where(
+            and(
+              eq(s.npiUserRoles.departmentId, department.id),
+              eq(s.npiUserRoles.role, role),
+            ),
+          )
+      : []
   return {
     id: userId,
     name: user.name || user.email,

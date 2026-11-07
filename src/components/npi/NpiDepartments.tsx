@@ -6,17 +6,29 @@ import {
   DialogTitle,
   DialogDescription,
 } from '../ui/Dialog'
+import {
+  departmentCategories,
+  type DepartmentCategory,
+} from '../../lib/auth/department-categories'
 import type { listDepartments } from '../../lib/npi/department-service'
 type Data = Awaited<ReturnType<typeof listDepartments>>
 type Api = <T>(path: string, method?: string, data?: unknown) => Promise<T>
-export function NpiDepartments({ api }: { api: Api }) {
+export function NpiDepartments({
+  api,
+  revision = 0,
+  onChanged,
+}: {
+  api: Api
+  revision?: number
+  onChanged?: () => void
+}) {
   const [data, setData] = useState<Data | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState<{
     id?: string
     name: string
-    role: 'manufacturing' | 'procurement'
+    role: DepartmentCategory
     version: number
     members: string[]
   } | null>(null)
@@ -30,7 +42,7 @@ export function NpiDepartments({ api }: { api: Api }) {
   }, [api])
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, revision])
   return (
     <section className="npi-panel" aria-label="部门协作分组">
       <div className="npi-panel-title">
@@ -51,7 +63,7 @@ export function NpiDepartments({ api }: { api: Api }) {
         </button>
       </div>
       <p className="npi-list-summary">
-        同部门、同岗位的成员共同处理所有成员负责的任务，保留主负责人和实际办理人。采购成员仅查看本部门采购件；制造成员可查看本部门负责的项目。主管的计划权限保持不变。
+        设计类部门用于人员归属，项目流程仍由具体项目负责人填写。生产、采购类部门的同岗位成员共同处理部门任务，保留主负责人和实际办理人；主管仍只调整计划。部门名称会出现在注册页。
       </p>
       {error && (
         <p role="alert" className="npi-error">
@@ -63,7 +75,7 @@ export function NpiDepartments({ api }: { api: Api }) {
         <div className="npi-settings-row" key={d.id}>
           <div>
             <strong>
-              {d.name} · {d.role === 'manufacturing' ? '制造' : '采购'}
+              {d.name} · {departmentCategories[d.role]}
             </strong>
             <small>
               {data.members
@@ -115,7 +127,7 @@ export function NpiDepartments({ api }: { api: Api }) {
             {draft?.id ? '管理部门成员' : '新建部门分组'}
           </DialogTitle>
           <DialogDescription>
-            保存后立即调整共享范围，新增成员可查看并办理同组成员的任务；移出成员失去共享权限，自己负责的任务仍可办理。主负责人不变，已停用账号不能参与协作。
+            部门类别决定成员业务岗位，保存后立即生效。生产、采购成员共享同部门任务；设计类不共享项目负责人填写权限。未启用账号不能加入协作。
           </DialogDescription>
           {draft && (
             <form
@@ -135,6 +147,7 @@ export function NpiDepartments({ api }: { api: Api }) {
                     reason,
                   })
                   setDraft(null)
+                  onChanged?.()
                   await load()
                 } catch (e) {
                   setError(String(e))
@@ -156,20 +169,26 @@ export function NpiDepartments({ api }: { api: Api }) {
                   />
                 </label>
                 <label>
-                  部门岗位
+                  部门类别
                   <select
+                    aria-label="部门类别"
                     value={draft.role}
                     disabled={!!draft.id}
                     onChange={(e) =>
                       setDraft({
                         ...draft,
-                        role: e.target.value as 'manufacturing',
+                        role: e.target.value as DepartmentCategory,
                         members: [],
                       })
                     }
                   >
-                    <option value="manufacturing">制造</option>
-                    <option value="procurement">采购</option>
+                    {Object.entries(departmentCategories).map(
+                      ([value, name]) => (
+                        <option key={value} value={value}>
+                          {name}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </label>
                 <div
@@ -185,7 +204,8 @@ export function NpiDepartments({ api }: { api: Api }) {
                           type="checkbox"
                           checked={draft.members.includes(m.id)}
                           disabled={
-                            !!m.departmentId && m.departmentId !== draft.id
+                            (!m.active && !draft.members.includes(m.id)) ||
+                            (!!m.departmentId && m.departmentId !== draft.id)
                           }
                           onChange={(e) =>
                             setDraft({

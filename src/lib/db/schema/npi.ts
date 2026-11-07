@@ -66,7 +66,7 @@ export const npiDepartments = pgTable('npi_departments', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 100 }).notNull().unique(),
   role: varchar('role', { length: 30 })
-    .$type<'manufacturing' | 'procurement'>()
+    .$type<'technical' | 'manufacturing' | 'procurement'>()
     .notNull(),
   version: integer('version').notNull().default(1),
   createdAt: created(),

@@ -3,6 +3,7 @@ import { validateRequestSession } from '../../lib/auth/server'
 import * as accounts from '../../lib/auth/accounts'
 import { NpiError } from '../../lib/npi/domain'
 import { uuidValue } from '../../lib/npi/service'
+import { reviewRegistration } from '../../lib/auth/registration'
 const app = new Hono<{ Variables: { userId: string } }>()
 app.use('*', async (c, next) => {
   const session = await validateRequestSession(c.req.raw)
@@ -43,6 +44,15 @@ app.patch('/:id', async (c) =>
 app.post('/:id/password', async (c) =>
   c.json(
     await accounts.resetPassword(
+      c.get('userId'),
+      uuidValue(c.req.param('id')),
+      await c.req.json(),
+    ),
+  ),
+)
+app.post('/:id/registration', async (c) =>
+  c.json(
+    await reviewRegistration(
       c.get('userId'),
       uuidValue(c.req.param('id')),
       await c.req.json(),
