@@ -256,14 +256,12 @@ app.patch('/projects/:id/plan', async (c) =>
 app.get('/process-guide', async (c) => {
   await npi.getActor(c.get('userId'))
   try {
-    const bytes = await readFile(
-      resolve('docs/设计部新品全流程跟踪管理办法.docx'),
-    )
+    const bytes = await readFile(resolve('docs/设计部新品跟踪管理程序.docx'))
     return new Response(new Uint8Array(bytes), {
       headers: {
         'Content-Type':
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="HD-NPI-Process.docx"; filename*=UTF-8''${encodeURIComponent('设计部新品全流程跟踪管理办法.docx')}`,
+        'Content-Disposition': `attachment; filename="HD-NPI-Process.docx"; filename*=UTF-8''${encodeURIComponent('设计部新品跟踪管理程序.docx')}`,
         'X-Content-Type-Options': 'nosniff',
       },
     })

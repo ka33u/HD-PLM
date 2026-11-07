@@ -5,12 +5,23 @@ import { NpiWorkspace } from './components/npi/NpiWorkspace'
 import { AccountManager } from './components/accounts/AccountManager'
 import { FirstRunSetup } from './components/accounts/FirstRunSetup'
 import type { FormEvent } from 'react'
+import { loginReturnTo } from './lib/auth/return-to'
 
 function Login() {
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [savedEmail] = useState(() => {
+    try {
+      return localStorage.getItem('npi-login-email') || ''
+    } catch {
+      return ''
+    }
+  })
+  const [rememberEmail, setRememberEmail] = useState(!!savedEmail)
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (busy) return
     setBusy(true)
     setError('')
     const f = new FormData(e.currentTarget)
@@ -19,9 +30,17 @@ function Login() {
         email: f.get('email'),
         password: f.get('password'),
       })
-      location.assign(
-        location.pathname === '/npi/trash' ? '/npi/trash' : '/npi',
-      )
+      try {
+        if (rememberEmail)
+          localStorage.setItem(
+            'npi-login-email',
+            String(f.get('email') || '').trim(),
+          )
+        else localStorage.removeItem('npi-login-email')
+      } catch {
+        /* Private browsing can disable local storage. */
+      }
+      location.assign(loginReturnTo(location))
     } catch (error) {
       setError(error instanceof Error ? error.message : '登录失败')
       setBusy(false)
@@ -47,7 +66,7 @@ function Login() {
       <main className="login-card">
         <p className="eyebrow">NPI WORKSPACE</p>
         <h2>登录工作空间</h2>
-        <p className="muted">使用管理员为你开通的账号</p>
+        <p className="muted">使用管理员开通的账号，登录后回到当前项目。</p>
         <form onSubmit={(e) => void submit(e)}>
           <fieldset disabled={busy}>
             <label>
@@ -55,6 +74,11 @@ function Login() {
               <input
                 name="email"
                 type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                defaultValue={savedEmail}
+                enterKeyHint="next"
                 autoComplete="username"
                 required
                 maxLength={254}
@@ -64,12 +88,31 @@ function Login() {
               密码
               <input
                 name="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
+                enterKeyHint="go"
                 autoComplete="current-password"
                 required
                 maxLength={128}
               />
             </label>
+            <div className="login-options">
+              <label className="setup-show-password">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(e) => setRememberEmail(e.target.checked)}
+                />
+                记住邮箱
+              </label>
+              <label className="setup-show-password">
+                <input
+                  type="checkbox"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                />
+                显示密码
+              </label>
+            </div>
             {error && (
               <p role="alert" className="form-error">
                 {error}
@@ -86,13 +129,21 @@ function Login() {
   )
 }
 function AccountPage() {
+  const [returnTo] = useState(() => {
+    const target = loginReturnTo(location)
+    return target.startsWith('/account') ? '/npi' : target
+  })
   const { user, reload } = useAccount(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('')
   useEffect(() => {
     if (user?.mustChangePassword && location.pathname !== '/account')
-      history.replaceState(null, '', '/account')
+      history.replaceState(
+        null,
+        '',
+        '/account?redirect=' + encodeURIComponent(returnTo),
+      )
   }, [user?.mustChangePassword])
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -124,7 +175,7 @@ function AccountPage() {
   return (
     <div className="account-layout">
       <header>
-        <a href="/npi">← 新品协同</a>
+        <a href={returnTo}>← 新品协同</a>
         <button onClick={() => void logout()}>退出登录</button>
       </header>
       <main>
@@ -189,7 +240,7 @@ function AccountPage() {
                 {busy ? '正在保存…' : '保存新密码'}
               </button>
               {!user?.mustChangePassword && (
-                <a className="account-link" href="/npi">
+                <a className="account-link" href={returnTo}>
                   进入工作空间 →
                 </a>
               )}

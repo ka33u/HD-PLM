@@ -9,6 +9,14 @@ import {
 } from '../../lib/npi/file-types'
 import type { FormEvent } from 'react'
 import type { FileScope, NpiFileList } from '../../lib/npi/file-service'
+import { NpiPhotos } from './NpiPhotos'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '../ui/Dialog'
+import './photos.css'
 
 type Api = <T>(path: string, method?: string, data?: unknown) => Promise<T>
 export function NpiFiles({
@@ -40,6 +48,8 @@ export function NpiFiles({
     [loadError, setLoadError] = useState(''),
     [message, setMessage] = useState('')
   const [archiveId, setArchiveId] = useState('')
+  const [photoPending, setPhotoPending] = useState(false)
+  const [previewId, setPreviewId] = useState<string | null>(null)
   const initialCategory =
     defaultCategory ||
     (scope.kind === 'lifecycle'
@@ -54,7 +64,7 @@ export function NpiFiles({
   const blocked = busy || loading || !!loadError || disabled
   const pending = useRef<{ notify?: (busy: boolean) => void } | null>(null)
   const begin = (kind: 'upload' | 'archive') => {
-    if (pending.current || blocked || readOnly) return null
+    if (pending.current || blocked || photoPending || readOnly) return null
     const token = { notify: onBusyChange }
     pending.current = token
     setOperation(kind)
@@ -138,6 +148,15 @@ export function NpiFiles({
       finish(token)
     }
   }
+  const images =
+    data?.files.filter(
+      (f) =>
+        f.available &&
+        f.mimeType.startsWith('image/') &&
+        (showArchived || !f.archivedAt),
+    ) || []
+  const previewIndex = images.findIndex((f) => f.id === previewId)
+  const preview = images[previewIndex]
   return (
     <section className="npi-files" aria-label="附件资料">
       <div className="npi-panel-title">
@@ -182,90 +201,121 @@ export function NpiFiles({
         </p>
       )}
       {data?.canUpload && !readOnly && (
-        <form onSubmit={upload} className="npi-file-upload">
-          <fieldset
-            disabled={blocked}
-            onChange={() => {
-              requestId.current = createRequestId()
-            }}
-          >
-            <label>
-              资料标题
-              <input
-                name="title"
-                maxLength={200}
-                placeholder="可选，默认使用文件名"
-              />
-            </label>
-            <label>
-              文件分类
-              <select
-                name="category"
-                aria-label="文件分类"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {scope.kind === 'lifecycle' ? (
-                  <>
-                    <option value="report">报告及分析</option>
-                    <option value="evidence">现场照片 / 客户反馈依据</option>
-                  </>
-                ) : scope.kind === 'issue' ? (
-                  <option value="issue">问题照片 / 说明资料</option>
-                ) : (
-                  <>
-                    {!buyer && <option value="technical">技术资料</option>}
-                    {scope.kind === 'tracking' && (
-                      <option value="receipt">到货照片 / 资料</option>
-                    )}
-                  </>
-                )}
-              </select>
-            </label>
-            {scope.kind === 'lifecycle' && category === 'report' && (
-              <>
-                <label>
-                  报告分析
-                  <textarea
-                    name="analysis"
-                    aria-label="报告分析"
-                    maxLength={8000}
-                    rows={3}
-                    required
-                    placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
-                  />
-                </label>
-                <label>
-                  报告结论
-                  <select
-                    name="conclusion"
-                    aria-label="报告结论"
-                    defaultValue=""
-                    required
-                  >
-                    <option value="">请选择</option>
-                    <option value="pass">通过</option>
-                    <option value="fail">不通过</option>
-                    <option value="continue">需要补充验证</option>
-                  </select>
-                </label>
-              </>
-            )}
-            <label>
-              选择文件或照片
-              <input
-                name="file"
-                aria-label="选择文件或照片"
-                type="file"
-                accept={NPI_FILE_ACCEPT}
-                required
-              />
-            </label>
-            <button className="npi-button">
-              {operation === 'upload' ? '正在上传…' : '上传资料'}
-            </button>
-          </fieldset>
-        </form>
+        <NpiPhotos
+          key={path}
+          api={api}
+          scope={scope}
+          category={
+            scope.kind === 'lifecycle'
+              ? 'evidence'
+              : scope.kind === 'issue'
+                ? 'issue'
+                : buyer
+                  ? 'receipt'
+                  : category
+          }
+          disabled={blocked}
+          onPendingChange={(value) => {
+            setPhotoPending(value)
+            onBusyChange?.(value || !!pending.current)
+          }}
+          onChanged={async () => {
+            await reload()
+            await onChanged?.()
+          }}
+        />
+      )}
+      {data?.canUpload && !readOnly && (
+        <details
+          className="npi-file-upload-options"
+          open={scope.kind !== 'lifecycle' || initialCategory === 'report'}
+        >
+          <summary>上传报告或其他文件</summary>
+          <form onSubmit={upload} className="npi-file-upload">
+            <fieldset
+              disabled={blocked || photoPending}
+              onChange={() => {
+                requestId.current = createRequestId()
+              }}
+            >
+              <label>
+                资料标题
+                <input
+                  name="title"
+                  maxLength={200}
+                  placeholder="可选，默认使用文件名"
+                />
+              </label>
+              <label>
+                文件分类
+                <select
+                  name="category"
+                  aria-label="文件分类"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {scope.kind === 'lifecycle' ? (
+                    <>
+                      <option value="report">报告及分析</option>
+                      <option value="evidence">现场照片 / 客户反馈依据</option>
+                    </>
+                  ) : scope.kind === 'issue' ? (
+                    <option value="issue">问题照片 / 说明资料</option>
+                  ) : (
+                    <>
+                      {!buyer && <option value="technical">技术资料</option>}
+                      {scope.kind === 'tracking' && (
+                        <option value="receipt">到货照片 / 资料</option>
+                      )}
+                    </>
+                  )}
+                </select>
+              </label>
+              {scope.kind === 'lifecycle' && category === 'report' && (
+                <>
+                  <label>
+                    报告分析
+                    <textarea
+                      name="analysis"
+                      aria-label="报告分析"
+                      maxLength={8000}
+                      rows={3}
+                      required
+                      placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
+                    />
+                  </label>
+                  <label>
+                    报告结论
+                    <select
+                      name="conclusion"
+                      aria-label="报告结论"
+                      defaultValue=""
+                      required
+                    >
+                      <option value="">请选择</option>
+                      <option value="pass">通过</option>
+                      <option value="fail">不通过</option>
+                      <option value="continue">需要补充验证</option>
+                    </select>
+                  </label>
+                </>
+              )}
+              <label>
+                选择文件或照片
+                <input
+                  name="file"
+                  aria-label="选择文件或照片"
+                  type="file"
+                  accept={NPI_FILE_ACCEPT}
+                  required
+                />
+              </label>
+              <button className="npi-button">
+                {operation === 'upload' ? '正在上传…' : '上传资料'}
+              </button>
+            </fieldset>
+          </form>
+        </details>
       )}
       <label className="npi-file-archive-toggle">
         <input
@@ -286,13 +336,18 @@ export function NpiFiles({
             .map((f) => (
               <article key={f.id} className="npi-file-card">
                 {f.available && f.mimeType.startsWith('image/') && (
-                  <a href={`/api/v1/npi/file-content/${f.id}`}>
+                  <button
+                    type="button"
+                    className="npi-photo-preview"
+                    aria-label={`查看照片：${f.title}`}
+                    onClick={() => setPreviewId(f.id)}
+                  >
                     <img
                       loading="lazy"
                       src={`/api/v1/npi/file-content/${f.id}?inline=1`}
                       alt={`${f.title}预览`}
                     />
-                  </a>
+                  </button>
                 )}
                 <div>
                   <strong>{f.title}</strong>
@@ -323,7 +378,7 @@ export function NpiFiles({
                     {data.canArchive && !readOnly && !f.archivedAt && (
                       <button
                         type="button"
-                        disabled={blocked}
+                        disabled={blocked || photoPending}
                         onClick={() => setArchiveId(f.id)}
                       >
                         归档资料
@@ -334,7 +389,7 @@ export function NpiFiles({
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault()
-                        if (pending.current || blocked) return
+                        if (pending.current || blocked || photoPending) return
                         const reason = new FormData(e.currentTarget).get(
                           'reason',
                         )
@@ -374,11 +429,14 @@ export function NpiFiles({
                           name="reason"
                           required
                           maxLength={2000}
-                          disabled={blocked}
+                          disabled={blocked || photoPending}
                         />
                       </label>
                       <div className="npi-row-actions">
-                        <button className="npi-button" disabled={blocked}>
+                        <button
+                          className="npi-button"
+                          disabled={blocked || photoPending}
+                        >
                           {operation === 'archive' ? '正在归档…' : '确认归档'}
                         </button>
                         <button
@@ -405,6 +463,44 @@ export function NpiFiles({
           )}
         </>
       )}
+      <Dialog
+        open={!!preview}
+        onOpenChange={(open) => {
+          if (!open) setPreviewId(null)
+        }}
+      >
+        <DialogContent className="npi-photo-lightbox">
+          <DialogTitle>{preview?.title}</DialogTitle>
+          <DialogDescription>
+            照片预览 · {previewIndex + 1} / {images.length}
+          </DialogDescription>
+          {preview && (
+            <img
+              src={`/api/v1/npi/file-content/${preview.id}?inline=1`}
+              alt={preview.title}
+            />
+          )}
+          <div className="npi-photo-actions">
+            <button
+              type="button"
+              disabled={previewIndex <= 0}
+              onClick={() => setPreviewId(images[previewIndex - 1]!.id)}
+            >
+              上一张
+            </button>
+            <button
+              type="button"
+              disabled={previewIndex >= images.length - 1}
+              onClick={() => setPreviewId(images[previewIndex + 1]!.id)}
+            >
+              下一张
+            </button>
+            <button type="button" onClick={() => setPreviewId(null)}>
+              关闭预览
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

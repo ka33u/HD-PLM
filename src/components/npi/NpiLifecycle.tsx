@@ -7,6 +7,7 @@ import {
   lifecycleKinds,
   resultLabels,
   statusLabels,
+  stagePhotoRequirements,
 } from '../../lib/npi/lifecycle'
 import { requestId } from '../../lib/request-id'
 import { stageLabels } from './navigation'
@@ -73,6 +74,7 @@ export function NpiLifecycle({
   const [filter, setFilter] = useState('all'),
     [limit, setLimit] = useState(20)
   const generation = useRef(0)
+  const attachments = useRef<HTMLElement>(null)
   const load = useCallback(async () => {
     const current = ++generation.current
     try {
@@ -457,6 +459,26 @@ export function NpiLifecycle({
             <DialogDescription>
               {definition.purpose} 已提交记录不覆盖，更正或复测请新增记录。
             </DialogDescription>
+            <div className="npi-photo-actions">
+              <button
+                type="button"
+                className="npi-button secondary"
+                disabled={busy || fileBusy}
+                onClick={async () => {
+                  if (!readOnly && (dirty || edit.version === 0)) {
+                    await save('draft')
+                  }
+                  attachments.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  })
+                }}
+              >
+                {!readOnly && (dirty || edit.version === 0)
+                  ? '保存并添加照片'
+                  : '照片与报告'}
+              </button>
+            </div>
             {editError && (
               <p className="npi-error" role="alert">
                 {editError}
@@ -775,8 +797,13 @@ export function NpiLifecycle({
                   </section>
                 </fieldset>
               </form>
-              <section className="npi-lifecycle-fields">
+              <section className="npi-lifecycle-fields" ref={attachments}>
                 <h3>报告与依据</h3>
+                <p className="npi-photo-requirement">
+                  {edit.result === 'not_applicable'
+                    ? '客户试用不适用：上传客户或合同确认依据，无需补拍试用现场照片。'
+                    : `本阶段应覆盖：${stagePhotoRequirements[edit.kind].join('；')}。提交前至少上传一张未归档的照片或截图，项目负责人核对覆盖内容和清晰度。`}
+                </p>
                 {edit.version === 0 ? (
                   <p className="npi-muted">
                     先保存草稿，再上传报告、现场照片或客户反馈。

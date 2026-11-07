@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -15,7 +15,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "setup": "tsx scripts/setup.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/npi-unit.test.ts tests/npi-file-validation.test.ts tests/build-config.test.ts tests/workspace-location.test.ts tests/table-selection.test.ts",
+    "test": "node --import tsx --test tests/npi-unit.test.ts tests/npi-file-validation.test.ts tests/build-config.test.ts tests/workspace-location.test.ts tests/table-selection.test.ts tests/mobile-photo-unit.test.ts",
     "test:http": "node --import tsx tests/npi-http.test.ts",
     "test:auth": "node --import tsx --test tests/auth.test.ts",
     "test:browser": "node --import tsx --test tests/delivery-browser.test.ts",
@@ -36,7 +36,8 @@
     "test:delivery": "node --import tsx --test tests/delivery.test.ts tests/delivery-migration.test.ts",
     "test:compact-bom": "node --import tsx --test tests/compact-bom.test.ts",
     "test:project-workbench": "node --import tsx --test tests/project-workbench.test.ts",
-    "test:lifecycle": "node --import tsx --test tests/lifecycle.test.ts"
+    "test:lifecycle": "node --import tsx --test tests/lifecycle.test.ts",
+    "test:mobile-photos": "node --import tsx --test tests/mobile-photos.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",

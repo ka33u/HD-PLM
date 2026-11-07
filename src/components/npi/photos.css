@@ -1,0 +1,207 @@
+.npi-photo-upload {
+  margin: 12px 0 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #dce4ee;
+}
+.npi-photo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+.npi-photo-actions button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+}
+.npi-photo-upload input[hidden] {
+  display: none;
+}
+.npi-photo-queue {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.npi-photo-item {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  background: #fff;
+}
+.npi-photo-item > img {
+  width: 100%;
+  height: 130px;
+  object-fit: contain;
+  background: #f2f5f9;
+  border-radius: 5px;
+}
+.npi-photo-item label {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  margin: 6px 0;
+}
+.npi-photo-item input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+}
+.npi-photo-item p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.npi-photo-item[data-status='done'] {
+  border-color: #75ad94;
+}
+.npi-photo-item[data-status='done'] > p {
+  color: #156747;
+}
+.npi-photo-item[data-status='error'] {
+  border-color: #c96058;
+}
+.npi-photo-remove {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.npi-photo-preview {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.npi-photo-lightbox {
+  width: min(960px, 96vw);
+  max-height: 94dvh;
+  padding: 22px;
+  overflow: auto;
+  background: #fff;
+}
+.npi-photo-lightbox > img {
+  display: block;
+  width: 100%;
+  max-height: 68dvh;
+  object-fit: contain;
+  background: #edf1f6;
+}
+.npi-photo-lightbox button {
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 16px;
+}
+.npi-photo-lightbox h2 {
+  padding-right: 24px;
+  overflow-wrap: anywhere;
+}
+.npi-photo-reauth {
+  display: grid;
+  gap: 12px;
+  max-width: 380px;
+  margin: 16px 0;
+}
+.npi-photo-reauth label {
+  display: grid;
+  gap: 6px;
+}
+.npi-photo-reauth input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.npi-photo-requirement {
+  color: #425671;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.npi-file-upload-options > summary {
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-options {
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+.login-options label {
+  min-height: 44px;
+}
+@media (max-width: 700px) {
+  .dialog-content.npi-lifecycle-modal {
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: max(16px, env(safe-area-inset-top)) 14px 12px;
+  }
+  .npi-lifecycle-modal > h2 {
+    margin: 0 30px 6px 0;
+    font-size: 18px;
+  }
+  .npi-lifecycle-modal > p {
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 4px 0;
+  }
+  .npi-lifecycle-modal > .npi-photo-actions {
+    margin: 6px 0;
+  }
+  .npi-lifecycle-modal .npi-actions {
+    margin-top: 8px;
+  }
+  .login-card input,
+  .account-layout input,
+  .npi-lifecycle-modal input,
+  .npi-lifecycle-modal select,
+  .npi-lifecycle-modal textarea,
+  .npi-files input,
+  .npi-files select,
+  .npi-files textarea {
+    font-size: 16px;
+  }
+  .login-card button {
+    min-height: 46px;
+  }
+  .login-card {
+    padding: 24px 22px calc(24px + env(safe-area-inset-bottom));
+    align-self: start;
+  }
+  .npi-photo-queue {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .npi-photo-item > img {
+    height: 110px;
+  }
+  .npi-photo-lightbox {
+    width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 16px;
+  }
+  .npi-lifecycle-modal .npi-actions {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .npi-lifecycle-modal .npi-actions button {
+    min-height: 44px;
+  }
+}

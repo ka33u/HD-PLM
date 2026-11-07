@@ -8,6 +8,21 @@ import type { LifecycleKind } from '../../src/lib/npi/lifecycle'
 export const processPdf = Buffer.from(
   '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n',
 )
+export const processPhoto = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jBf8AAAAASUVORK5CYII=',
+  'base64',
+)
+export function photoForm(version: number) {
+  const form = new FormData()
+  form.set(
+    'file',
+    new File([processPhoto], '现场照片.png', { type: 'image/png' }),
+  )
+  form.set('requestId', crypto.randomUUID())
+  form.set('category', 'evidence')
+  form.set('expectedRecordVersion', String(version))
+  return form
+}
 export function lifecyclePayload(kind: LifecycleKind, result = 'pass') {
   return {
     kind,
@@ -55,16 +70,14 @@ export async function seedLifecycleForLegacyTests(
     .where(eq(s.npiProjects.programId, projectId))
   for (const kind of lifecycleKinds) {
     const payload = lifecyclePayload(kind)
-    await db
-      .insert(s.npiLifecycleRecords)
-      .values({
-        ...payload,
-        id: crypto.randomUUID(),
-        programId: projectId,
-        status: 'submitted',
-        submittedAt: new Date(),
-        createdBy: p.technicalOwnerId,
-        updatedBy: p.technicalOwnerId,
-      })
+    await db.insert(s.npiLifecycleRecords).values({
+      ...payload,
+      id: crypto.randomUUID(),
+      programId: projectId,
+      status: 'submitted',
+      submittedAt: new Date(),
+      createdBy: p.technicalOwnerId,
+      updatedBy: p.technicalOwnerId,
+    })
   }
 }

@@ -178,7 +178,15 @@ export async function listFiles(userId: string, scope: FileScope) {
   const rows = await query(db)
     .where(condition(scope))
     .orderBy(desc(s.npiAttachments.createdAt))
+  const [record] =
+    scope.kind === 'lifecycle'
+      ? await db
+          .select({ version: s.npiLifecycleRecords.version })
+          .from(s.npiLifecycleRecords)
+          .where(eq(s.npiLifecycleRecords.id, scope.id))
+      : []
   return {
+    recordVersion: record?.version,
     files: rows
       .filter((r) => r.file.programId === permission.programId)
       .map(summary),

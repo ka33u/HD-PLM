@@ -50,6 +50,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:lifecycle
+      - run: npm run test:mobile-photos
       - run: npm run test:project-workbench
       - run: npm run test:compact-bom
       - run: npm run test:browser

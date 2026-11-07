@@ -282,6 +282,18 @@ export const statusLabels: Record<string, string> = {
   submitted: '已提交',
   cancelled: '已取消',
 }
+export const stagePhotoRequirements: Record<LifecycleKind, string[]> = {
+  design: ['应用现场或需求依据', '关键结构、接口或设计评审截图'],
+  manufacturing: ['工装、检具及设备准备', '关键物料与工艺准备状态'],
+  prototype: ['样机整体及铭牌编号', '关键结构、装配与检验状态'],
+  test: [
+    '受试样机及安装连接',
+    '供电负载、仪器设置与关键读数',
+    '试验过程与异常现象（如有）',
+  ],
+  trial: ['客户现场安装与产品标识', '实际工况、累计运行读数及反馈问题'],
+  closure: ['定型样机及最终标识', '最终配置或交接依据'],
+}
 export function parseLifecycleData(
   kind: LifecycleKind,
   value: unknown,
@@ -335,7 +347,12 @@ export function submissionErrors(
     data: LifecycleData
     performedDate: string | null
   },
-  files: Array<{ category: string; conclusion: string; archivedAt: unknown }>,
+  files: Array<{
+    category: string
+    conclusion: string
+    archivedAt: unknown
+    mimeType?: string
+  }>,
 ) {
   const errors: string[] = [],
     { fields, measurements } = record.data
@@ -351,6 +368,12 @@ export function submissionErrors(
     if (!active.length) errors.push('请上传客户或合同确认依据')
     return errors
   }
+  if (
+    !active.some(
+      (f) => f.category === 'evidence' && f.mimeType?.startsWith('image/'),
+    )
+  )
+    errors.push('请上传本阶段照片或截图，至少保留一张未归档的现场依据图片')
   for (const f of lifecycleDefinitions[record.kind].fields)
     if (!fields[f.key]) errors.push(`请填写${f.label}`)
   if (

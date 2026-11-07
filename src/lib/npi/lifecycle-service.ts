@@ -126,6 +126,7 @@ export async function getLifecycle(userId: string, projectId: string) {
           id: s.npiAttachments.id,
           recordId: s.npiAttachments.lifecycleRecordId,
           category: s.npiAttachments.category,
+          mimeType: s.npiAttachments.mimeType,
           conclusion: s.npiAttachments.conclusion,
           archivedAt: s.npiAttachments.archivedAt,
         })

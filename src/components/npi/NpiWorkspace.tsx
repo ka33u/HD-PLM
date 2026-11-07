@@ -353,16 +353,31 @@ export function NpiWorkspace() {
         if (!(data instanceof FormData))
           headers['Content-Type'] = 'application/json'
       }
-      const response = await fetch(`/api/v1/npi${path}`, {
-        method,
-        headers,
-        body:
-          data === undefined
-            ? undefined
-            : data instanceof FormData
-              ? data
-              : JSON.stringify(data),
-      })
+      const controller =
+        data instanceof FormData ? new AbortController() : undefined
+      const timer = controller
+        ? window.setTimeout(() => controller.abort(), 60_000)
+        : undefined
+      let response: Response
+      try {
+        response = await fetch(`/api/v1/npi${path}`, {
+          method,
+          ...(controller ? { signal: controller.signal } : {}),
+          headers,
+          body:
+            data === undefined
+              ? undefined
+              : data instanceof FormData
+                ? data
+                : JSON.stringify(data),
+        })
+      } catch (error) {
+        if (controller?.signal.aborted)
+          throw new Error('上传等待超时，请保留当前页面并重试核对结果')
+        throw error
+      } finally {
+        if (timer !== undefined) window.clearTimeout(timer)
+      }
       const body = await response.json().catch(() => null)
       if (!response.ok)
         throw Object.assign(

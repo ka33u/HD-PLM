@@ -7,7 +7,12 @@ import { createServer } from 'node:net'
 import { setTimeout as delay } from 'node:timers/promises'
 import { chromium, expect } from '@playwright/test'
 import { deliveryFixture } from './helpers/delivery-fixture'
-import { lifecyclePayload, processPdf } from './helpers/lifecycle-fixture'
+import {
+  lifecyclePayload,
+  processPdf,
+  processPhoto,
+  photoForm,
+} from './helpers/lifecycle-fixture'
 import { lifecycleDefinitions } from '../src/lib/npi/lifecycle'
 import { projectMatchesFilter } from '../src/lib/npi/project-dashboard'
 import { today } from '../src/lib/npi/domain'
@@ -33,9 +38,22 @@ async function save(
   await f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
     ...payload,
     expectedVersion: 0,
-    action,
+    action: action === 'submit' ? 'draft' : action,
   })
+  if (action === 'submit') {
+    await photo(id, pid)
+    await submit(id, {}, pid)
+  }
   return id
+}
+async function photo(id: string, pid = projectId) {
+  return f.call(
+    'technical',
+    `/files/lifecycle/${id}`,
+    'POST',
+    photoForm((await record(id, pid)).version),
+    201,
+  )
 }
 function upload(
   version: number,
@@ -127,6 +145,7 @@ try {
     })
     await submit(id, {}, projectId, 422)
     await advance('manufacturing', 409)
+    await photo(id)
     const old = await record(id)
     await f.call('technical', `/projects/${projectId}/lifecycle/${id}`, 'PUT', {
       ...payload,
@@ -204,6 +223,7 @@ try {
     )
     assert.equal(file.id, same.id)
     assert.equal((await record(id)).version, 2)
+    await photo(id)
     const r = await record(id)
     await submit(id, {
       data: {
@@ -249,6 +269,7 @@ try {
       upload(1),
       201,
     )
+    await photo(passed)
     await submit(passed)
     await advance('trial', 409)
     await closeIssue(signed.issueId)
@@ -276,6 +297,7 @@ try {
       upload(1, 'evidence'),
       201,
     )
+    await photo(trial)
     await submit(trial)
     const signed = await record(trial)
     assert(signed.issueId)
@@ -287,6 +309,7 @@ try {
       upload(1, 'evidence'),
       201,
     )
+    await photo(finalTrial)
     await submit(finalTrial)
     await save('closure')
     await advance('completed', 409)
@@ -372,6 +395,7 @@ try {
       upload(1, 'report', 'fail'),
       201,
     )
+    await photo(fail, pid)
     await f.db.execute(
       sql`create trigger lifecycle_audit_failure before insert on npi_events for each row execute function fail_lifecycle_audit()`,
     )
@@ -407,6 +431,7 @@ try {
       upload(1),
       201,
     )
+    await photo(id, pid)
     const { users } = await import('../src/lib/db/schema/users'),
       { createSession } = await import('../src/lib/auth/session')
     const [u] = await f.db
@@ -521,6 +546,7 @@ try {
     assert.equal(row.lifecycle.overdueCount, 1)
     assert.equal(projectMatchesFilter(row, 'risk', today()), true)
     assert.equal(projectMatchesFilter(row, 'overdue', today()), true)
+    await photo(id, pid)
     await submit(id, {}, pid)
     d = await f.detail(pid)
     assert.equal(d.lifecycle.overdueCount, 0)
@@ -536,7 +562,7 @@ try {
     assert.match(response.headers.get('Content-Disposition')!, /attachment/)
     assert.deepEqual(
       Buffer.from(await response.arrayBuffer()),
-      readFileSync('docs/设计部新品全流程跟踪管理办法.docx'),
+      readFileSync('docs/设计部新品跟踪管理程序.docx'),
     )
     const denied = await app.request(url)
     assert.equal(denied.status, 401)
@@ -651,6 +677,18 @@ try {
     await p.screenshot({
       path: 'runtime/test-evidence/lifecycle-report-analysis.png',
     })
+    await d.getByLabel('相册多选', { exact: true }).setInputFiles({
+      name: '现场照片.png',
+      mimeType: 'image/png',
+      buffer: processPhoto,
+    })
+    await d.getByRole('button', { name: '上传照片（1）', exact: true }).click()
+    await expect(
+      d.getByText('本批 1 张照片已全部上传，可在下方查看。', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      d.getByRole('button', { name: '提交结论', exact: true }),
+    ).toBeEnabled()
     await d.getByRole('button', { name: '提交结论', exact: true }).click()
     await expect(d).toHaveCount(0)
     await p
