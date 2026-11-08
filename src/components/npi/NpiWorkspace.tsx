@@ -762,6 +762,27 @@ export function NpiWorkspace() {
         { key: 'reason', label: '更正原因', type: 'textarea', required: true },
       ],
     })
+  const showBomAssignment = (
+    id: string,
+    items: { id: string; expectedVersion: number }[],
+    defaultOwnerId?: string,
+  ) =>
+    openModal({
+      title: '批量分配零部件任务',
+      help: `已选${items.length}项。可转交生产或采购；要求日期留空则保留每项原日期。`,
+      path: `/projects/${id}/bom/assign`,
+      fixed: { items },
+      fields: [
+        selectOwner(
+          'ownerId',
+          '回复责任人',
+          ['manufacturing', 'procurement'],
+          defaultOwnerId,
+        ),
+        { key: 'requiredDate', label: '统一要求日期（可留空）', type: 'date' },
+        { key: 'reason', label: '分配原因', type: 'textarea', required: true },
+      ],
+    })
   const [selectedBom, setSelectedBom] = useState<string[]>([])
   const [bomFocus, setBomFocus] = useState(false)
   const [bomDetailRow, setBomDetailRow] = useState<BomRow | null>(null)
@@ -1451,15 +1472,23 @@ export function NpiWorkspace() {
       </aside>
       <main className="npi-main">
         <header className="npi-topbar">
-          <span>
-            工作空间 <ChevronRight size={14} />{' '}
+          <span className="npi-breadcrumb">
+            <span className="npi-breadcrumb-root">工作空间</span>
+            <ChevronRight className="npi-breadcrumb-root" size={14} />
             {view === 'project' ? (
               <>
-                {moduleInfo[returnView].label} <ChevronRight size={14} />{' '}
-                {project?.name}
+                <span className="npi-breadcrumb-module">
+                  {moduleInfo[returnView].label}
+                </span>
+                <ChevronRight size={14} />
+                <span className="npi-breadcrumb-current" title={project?.name}>
+                  {project?.name}
+                </span>
               </>
             ) : (
-              moduleInfo[view].label
+              <span className="npi-breadcrumb-current">
+                {moduleInfo[view].label}
+              </span>
             )}
           </span>
           <a className="account-shortcut" href="/account">
@@ -1587,6 +1616,16 @@ export function NpiWorkspace() {
                 }}
                 onOpenProject={(id) =>
                   void openProject(id, undefined, 'bom', null, true, 'projects')
+                }
+                onAssign={(id, items) =>
+                  showBomAssignment(
+                    id,
+                    items.map((i) => ({
+                      id: i.bomItemId!,
+                      expectedVersion: i.version,
+                    })),
+                    items[0]?.ownerId,
+                  )
                 }
                 onQuick={(id, itemIds) =>
                   setQuickReply({
@@ -2458,37 +2497,15 @@ export function NpiWorkspace() {
                                 className="npi-button"
                                 disabled={!selectedBom.length}
                                 onClick={() =>
-                                  openModal({
-                                    title: '批量分配零部件任务',
-                                    help: `已选${selectedBom.length}项。可转交生产或采购；要求日期留空则保留每项原日期。`,
-                                    path: `/projects/${project.id}/bom/assign`,
-                                    fixed: {
-                                      items: selectedBom.map((id) => ({
-                                        id,
-                                        expectedVersion:
-                                          trackingByBom.get(id)?.version ?? 0,
-                                      })),
-                                    },
-                                    fields: [
-                                      selectOwner(
-                                        'ownerId',
-                                        '回复责任人',
-                                        ['manufacturing', 'procurement'],
-                                        project.manufacturingOwnerId,
-                                      ),
-                                      {
-                                        key: 'requiredDate',
-                                        label: '统一要求日期（可留空）',
-                                        type: 'date',
-                                      },
-                                      {
-                                        key: 'reason',
-                                        label: '分配原因',
-                                        type: 'textarea',
-                                        required: true,
-                                      },
-                                    ],
-                                  })
+                                  showBomAssignment(
+                                    project.id,
+                                    selectedBom.map((id) => ({
+                                      id,
+                                      expectedVersion:
+                                        trackingByBom.get(id)?.version ?? 0,
+                                    })),
+                                    project.manufacturingOwnerId,
+                                  )
                                 }
                               >
                                 批量分配 / 转采购

@@ -60,7 +60,7 @@ export function AccountManager({
 }: {
   embedded?: boolean
   revision?: number
-  onChanged?: () => void
+  onChanged?: () => void | Promise<void>
 }) {
   const Content = embedded ? 'section' : 'main'
   const { user } = useAccount(),
@@ -170,8 +170,6 @@ export function AccountManager({
           user.id,
         )
       const resettingSelf = modal.kind === 'password' && a?.id === user.id
-      setModal(null)
-      onChanged?.()
       setNotice(
         modal.kind === 'review'
           ? decision === 'approve'
@@ -180,14 +178,17 @@ export function AccountManager({
           : '已保存。账号停用、改岗和密码重置会使原登录失效。',
       )
       if (resettingSelf) {
+        setModal(null)
         location.assign('/login')
         return
       }
       try {
+        await onChanged?.()
         await refresh()
       } catch {
         setError('保存已成功，列表刷新失败，请点击刷新；不要重复提交。')
       }
+      setModal(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败')
     } finally {

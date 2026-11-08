@@ -185,12 +185,18 @@ export function NpiSettings({
           <NpiDepartments
             api={api}
             revision={departmentsRevision}
-            onChanged={() => setAccountsRevision((n) => n + 1)}
+            onChanged={async () => {
+              setAccountsRevision((n) => n + 1)
+              await onChanged()
+            }}
           />
           <AccountManager
             embedded
             revision={accountsRevision}
-            onChanged={() => setDepartmentsRevision((n) => n + 1)}
+            onChanged={async () => {
+              setDepartmentsRevision((n) => n + 1)
+              await onChanged()
+            }}
           />
         </TabsContent>
       </Tabs>

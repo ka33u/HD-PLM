@@ -157,7 +157,7 @@ export function FirstRunSetup() {
               </button>
             )}
             <p className="muted small">
-              本入口仅在没有账号时开放。团队成员的账号由管理员统一开通。
+              本入口仅在没有账号时开放。团队成员可自行注册，由管理员确认部门后开通，也可由管理员新增账号。
             </p>
           </>
         )}

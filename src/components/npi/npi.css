@@ -158,6 +158,25 @@
   gap: 14px;
   color: #677993;
 }
+.npi-topbar .npi-breadcrumb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-right: 12px;
+}
+.npi-breadcrumb-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.npi-breadcrumb > svg,
+.npi-breadcrumb-root,
+.npi-breadcrumb-module,
+.npi-topbar > a,
+.npi-topbar > button {
+  flex-shrink: 0;
+}
 .npi-content {
   padding: 30px 36px 50px;
   max-width: 1800px;
@@ -837,6 +856,9 @@
   }
   .npi-topbar > span {
     gap: 6px;
+  }
+  .npi-breadcrumb .npi-breadcrumb-root {
+    display: none;
   }
   .npi-topbar .npi-button {
     padding: 7px 10px;

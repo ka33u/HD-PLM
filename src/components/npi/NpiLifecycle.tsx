@@ -75,6 +75,9 @@ export function NpiLifecycle({
     [limit, setLimit] = useState(20)
   const generation = useRef(0)
   const attachments = useRef<HTMLElement>(null)
+  useEffect(() => {
+    setNotice('')
+  }, [project.id, project.currentNpiStage])
   const load = useCallback(async () => {
     const current = ++generation.current
     try {

@@ -25,6 +25,7 @@ export function NpiProjectWorkbench({
   revision,
   onSelect,
   onOpenProject,
+  onAssign,
   onQuick,
   onReply,
   onDetails,
@@ -38,6 +39,7 @@ export function NpiProjectWorkbench({
   revision: number
   onSelect: (id: string | null) => void
   onOpenProject: (id: string) => void
+  onAssign: (id: string, items: NpiTracking[]) => void
   onQuick: (id: string, itemIds?: string[]) => void
   onReply: (item: NpiTracking) => void
   onDetails: (item: NpiTracking) => void
@@ -173,6 +175,11 @@ export function NpiProjectWorkbench({
   const currentSelection = selected
     .map((id) => tasks.get(id))
     .filter((i): i is NpiTracking => !!i && canReply(i))
+  const assignSelection =
+    kind === 'manufacturing' &&
+    project?.canOpenProject &&
+    ['admin', 'technical', 'manufacturing'].includes(meta.actor.role) &&
+    currentSelection.length > 0
   const replyable = (data?.items || []).filter(canReply)
   const extras = (data?.items || []).filter(
     (i) => i.sourceType !== 'ERP_BOM' || i.bomReference?.current === false,
@@ -311,9 +318,21 @@ export function NpiProjectWorkbench({
           {project.canOpenProject && (
             <button
               className="npi-button secondary"
-              onClick={() => onOpenProject(project.id)}
+              disabled={!!assignSelection && currentSelection.length > 200}
+              title={
+                assignSelection && currentSelection.length > 200
+                  ? '每批最多分配200项，请减少选择'
+                  : undefined
+              }
+              onClick={() =>
+                assignSelection
+                  ? onAssign(project.id, currentSelection)
+                  : onOpenProject(project.id)
+              }
             >
-              项目资料与分配
+              {assignSelection
+                ? `分配已选 ${currentSelection.length} 项`
+                : '项目资料与分配'}
             </button>
           )}
           {replyable.length > 0 && (

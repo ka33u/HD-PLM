@@ -20,7 +20,7 @@ export function NpiDepartments({
 }: {
   api: Api
   revision?: number
-  onChanged?: () => void
+  onChanged?: () => void | Promise<void>
 }) {
   const [data, setData] = useState<Data | null>(null),
     [error, setError] = useState(''),
@@ -146,8 +146,8 @@ export function NpiDepartments({
                     expectedVersion: draft.version,
                     reason,
                   })
+                  await onChanged?.()
                   setDraft(null)
-                  onChanged?.()
                   await load()
                 } catch (e) {
                   setError(String(e))
