@@ -5,6 +5,7 @@ RUN npm ci
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 COPY scripts ./scripts
+COPY docs ./docs
 RUN npm run typecheck && npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim

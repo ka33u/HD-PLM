@@ -1,3 +1,4 @@
+import './check-guides.mjs'
 import { build as viteBuild } from 'vite'
 import { build as serverBuild } from 'esbuild'
 await viteBuild()

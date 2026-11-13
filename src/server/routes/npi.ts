@@ -1,5 +1,9 @@
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import {
+  guideCatalog,
+  processGuideFile,
+  sopDownload,
+  sopPage,
+} from '../guide-files'
 import { getLifecycle, saveLifecycle } from '../../lib/npi/lifecycle-service'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { projectWorkbench } from '../../lib/npi/project-workbench'
@@ -255,23 +259,19 @@ app.patch('/projects/:id/plan', async (c) =>
 )
 app.get('/process-guide', async (c) => {
   await npi.getActor(c.get('userId'))
-  try {
-    const bytes = await readFile(resolve('docs/设计部新品跟踪管理程序.docx'))
-    return new Response(new Uint8Array(bytes), {
-      headers: {
-        'Content-Type':
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="HD-NPI-Process.docx"; filename*=UTF-8''${encodeURIComponent('设计部新品跟踪管理程序.docx')}`,
-        'X-Content-Type-Options': 'nosniff',
-      },
-    })
-  } catch {
-    throw new NpiError(
-      'DOCUMENT_NOT_FOUND',
-      '流程文件暂不可用，请联系管理员核对部署文件',
-      503,
-    )
-  }
+  return processGuideFile()
+})
+app.get('/guides', async (c) => {
+  await npi.getActor(c.get('userId'))
+  return c.json(guideCatalog())
+})
+app.get('/guides/:id/download/:format', async (c) => {
+  await npi.getActor(c.get('userId'))
+  return sopDownload(c.req.param('id'), c.req.param('format'))
+})
+app.get('/guides/:id/pages/:page', async (c) => {
+  await npi.getActor(c.get('userId'))
+  return sopPage(c.req.param('id'), c.req.param('page'))
 })
 app.get('/projects/:id/lifecycle', async (c) =>
   c.json(await getLifecycle(c.get('userId'), c.req.param('id'))),

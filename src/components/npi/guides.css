@@ -1,0 +1,244 @@
+.npi-guides {
+  min-width: 0;
+}
+.npi-guide-process,
+.npi-guide-card,
+.npi-guide-reader {
+  background: #fff;
+  border: 1px solid var(--npi-line);
+  border-radius: 12px;
+}
+.npi-guide-process {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 22px;
+}
+.npi-guide-process > svg {
+  flex-shrink: 0;
+  color: var(--npi-blue);
+}
+.npi-guide-process > div {
+  flex: 1;
+}
+.npi-guide-process h2,
+.npi-guide-section-title h2,
+.npi-guide-reader h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.npi-guide-process p,
+.npi-guide-section-title p,
+.npi-guide-reader-heading p {
+  margin: 5px 0 0;
+  color: var(--npi-muted);
+}
+.npi-guide-kicker {
+  font-size: 12px;
+  color: var(--npi-muted);
+}
+.npi-guide-section-title {
+  margin: 28px 0 14px;
+}
+.npi-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.npi-guide-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.npi-guide-card-heading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: #087782;
+  font-weight: 600;
+}
+.npi-guide-production .npi-guide-card-heading {
+  color: #a64b3d;
+}
+.npi-guide-procurement .npi-guide-card-heading {
+  color: #065a82;
+}
+.npi-guide-card-heading small {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: #edf4fa;
+}
+.npi-guide-card h3 {
+  margin: 22px 0 8px;
+  font-size: 20px;
+}
+.npi-guide-card > p {
+  margin: 0 0 20px;
+  flex: 1;
+}
+.npi-guide-meta {
+  color: var(--npi-muted);
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+.npi-guide-read {
+  width: 100%;
+  justify-content: center;
+}
+.npi-guide-downloads {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.npi-guide-card .npi-guide-downloads {
+  margin-top: 14px;
+}
+.npi-guide-text-button {
+  border: 0;
+  background: transparent;
+  color: var(--npi-blue);
+  padding: 10px 3px;
+  font: inherit;
+}
+.npi-guide-reader {
+  padding: 20px;
+}
+.npi-guide-reader-heading {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.npi-guide-reader-heading > div:nth-child(2) {
+  flex: 1;
+}
+.npi-guide-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 22px;
+}
+.npi-guide-toolbar label {
+  flex: 1;
+  min-width: 0;
+}
+.npi-guide-toolbar select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  font: inherit;
+  border: 1px solid var(--npi-line);
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--npi-ink);
+  background: white;
+}
+.npi-guide-page-label {
+  margin: 14px 0 10px;
+  color: var(--npi-muted);
+  font-size: 13px;
+}
+.npi-guide-canvas {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid var(--npi-line);
+  background: #f3f6fa;
+  border-radius: 7px;
+}
+.npi-guide-canvas img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.npi-guide-canvas.zoomed {
+  max-height: 70vh;
+}
+.npi-guide-canvas.zoomed img {
+  width: 2000px;
+  max-width: none;
+}
+.npi-guide-hint {
+  font-size: 12px;
+  color: var(--npi-muted);
+}
+.npi-guide-transcript {
+  margin-top: 18px;
+}
+.npi-guide-transcript summary {
+  cursor: pointer;
+  color: var(--npi-blue);
+  padding: 8px 0;
+}
+.npi-guide-transcript > div {
+  white-space: pre-wrap;
+  padding: 16px;
+  background: #f5f8fc;
+  border-radius: 8px;
+}
+.npi-guide-image-error {
+  padding: 28px;
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+}
+.npi-guide-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+@media (max-width: 1100px) {
+  .npi-guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .npi-guide-card > p {
+    margin-bottom: 12px;
+  }
+}
+@media (max-width: 760px) {
+  .npi-guide-process {
+    flex-wrap: wrap;
+    padding: 16px;
+    gap: 12px;
+  }
+  .npi-guide-process > div {
+    flex-basis: calc(100% - 45px);
+  }
+  .npi-guide-card {
+    padding: 18px;
+  }
+  .npi-guide-reader {
+    padding: 12px;
+  }
+  .npi-guide-reader-heading {
+    gap: 12px;
+  }
+  .npi-guide-reader-heading > div:nth-child(2) {
+    flex-basis: 100%;
+  }
+  .npi-guide-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .npi-guide-toolbar label {
+    order: -1;
+    flex-basis: 100%;
+  }
+  .npi-guide-toolbar .npi-button {
+    flex: 1;
+    justify-content: center;
+    padding: 9px 6px;
+    min-height: 44px;
+  }
+  .npi-guide-downloads .npi-button,
+  .npi-guide-text-button {
+    min-height: 44px;
+  }
+}

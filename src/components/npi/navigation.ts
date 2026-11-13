@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const moduleInfo = {
+  guides: {
+    label: '流程与 SOP',
+    title: '流程与 SOP',
+    description: '查看统一流程要求，按部门学习操作方法，下载课件随时查阅。',
+  },
   trash: {
     label: '项目回收站',
     title: '项目回收站',
@@ -54,12 +59,13 @@ export const moduleInfo = {
 } as const
 export type ModuleId = keyof typeof moduleInfo
 export function navigationFor(role: string): Array<ModuleId> {
-  if (role === 'procurement') return ['procurement']
+  if (role === 'procurement') return ['procurement', 'guides']
   return [
     'dashboard',
     'projects',
     'manufacturing',
     'purchasing',
+    'guides',
     ...(role === 'admin' ? (['settings'] as const) : []),
   ]
 }

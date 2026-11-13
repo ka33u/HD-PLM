@@ -56,12 +56,14 @@ export function NpiLifecycle({
   onChanged,
   onTab,
   advance,
+  onGuides,
 }: {
   project: ProjectDetail
   api: Api
   onChanged: () => Promise<void>
   onTab: (tab: string) => void
   advance: () => void
+  onGuides: () => void
 }) {
   const [data, setData] = useState<LifecycleView | null>(null),
     [error, setError] = useState(''),
@@ -259,10 +261,10 @@ export function NpiLifecycle({
           <h2>项目流程</h2>
           <p>项目负责人记录事实、分析与结论，生产采购继续在交付任务中回复。</p>
         </div>
-        <a className="npi-button secondary" href="/api/v1/npi/process-guide">
+        <button className="npi-button secondary" onClick={onGuides}>
           <FileText size={16} />
-          流程文件
-        </a>
+          流程与 SOP
+        </button>
       </div>
       <ol className="npi-lifecycle-steps" aria-label="项目六阶段">
         {stages.map((s, i) => (

@@ -2,6 +2,7 @@
 import { NpiProjectWorkbench } from './NpiProjectWorkbench'
 import { ownsWork } from '../../lib/npi/work-ownership'
 import { NpiDeliveryList } from './NpiDeliveryList'
+import { NpiGuides } from './NpiGuides'
 import { NpiLifecycle } from './NpiLifecycle'
 import './workflow.css'
 import {
@@ -25,6 +26,7 @@ import {
 } from 'react'
 import {
   AlertTriangle,
+  BookOpen,
   ArrowLeft,
   BarChart3,
   Boxes,
@@ -97,6 +99,7 @@ import './compact-bom.css'
 import './project-workbench.css'
 
 const moduleIcons = {
+  guides: BookOpen,
   trash: Trash2,
   dashboard: LayoutDashboard,
   projects: FolderKanban,
@@ -1557,14 +1560,22 @@ export function NpiWorkspace() {
             )}
           {meta &&
             !dashboard &&
-            !['project', 'data', 'settings', 'procurement', 'trash'].includes(
-              view,
-            ) &&
+            ![
+              'project',
+              'data',
+              'settings',
+              'procurement',
+              'trash',
+              'guides',
+            ].includes(view) &&
             loading && (
               <p role="status" className="npi-module-empty">
                 正在读取业务数据…
               </p>
             )}
+          {meta && view === 'guides' && (
+            <NpiGuides api={api} role={meta.actor.role} />
+          )}
           {meta && view === 'dashboard' && dashboard && (
             <NpiProjectDashboard
               key={view}
@@ -1864,6 +1875,7 @@ export function NpiWorkspace() {
                     onChanged={() => refresh()}
                     onTab={changeProjectTab}
                     advance={advanceProject}
+                    onGuides={() => navigate('guides')}
                   />
                   <details className="npi-project-info-fold">
                     <summary>项目信息与电机参数</summary>
