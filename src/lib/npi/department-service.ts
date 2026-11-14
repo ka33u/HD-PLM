@@ -85,12 +85,13 @@ export async function saveDepartment(
     const name = textValue(input.name, '部门名称', 100),
       reason = textValue(input.reason, '变更原因', 2000)
     if (
-      !['technical', 'manufacturing', 'procurement'].includes(
+      !['technical', 'manufacturing', 'procurement', 'quality'].includes(
         String(input.role),
       )
     )
       throw new NpiError('VALIDATION_ERROR', '请选择设计、生产或采购类别')
-    const role = input.role as 'technical' | 'manufacturing' | 'procurement'
+    const role = input.role as
+      'technical' | 'manufacturing' | 'procurement' | 'quality'
     if (old && old.role !== role)
       throw new NpiError(
         'VALIDATION_ERROR',

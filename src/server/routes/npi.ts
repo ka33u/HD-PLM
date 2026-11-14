@@ -1,4 +1,10 @@
 import {
+  qualityProjects,
+  qualityDetail,
+  qualityHistory,
+  saveQuality,
+} from '../../lib/npi/quality-service'
+import {
   guideCatalog,
   processGuideFile,
   sopDownload,
@@ -205,6 +211,20 @@ app.get('/departments', async (c) =>
 )
 app.post('/departments', async (c) =>
   c.json(await saveDepartment(c.get('userId'), await c.req.json())),
+)
+app.get('/quality/projects', async (c) =>
+  c.json(await qualityProjects(c.get('userId'))),
+)
+app.get('/quality/projects/:id', async (c) =>
+  c.json(await qualityDetail(c.get('userId'), c.req.param('id'))),
+)
+app.post('/quality/projects/:id', async (c) =>
+  c.json(
+    await saveQuality(c.get('userId'), c.req.param('id'), await c.req.json()),
+  ),
+)
+app.get('/quality/records/:id/history', async (c) =>
+  c.json(await qualityHistory(c.get('userId'), c.req.param('id'))),
 )
 app.get('/meta', async (c) => c.json(await npi.metadata(c.get('userId'))))
 app.get('/dashboard', async (c) => c.json(await npi.dashboard(c.get('userId'))))

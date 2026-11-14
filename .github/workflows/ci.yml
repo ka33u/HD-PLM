@@ -53,6 +53,7 @@ jobs:
       - run: npm run test:mobile-photos
       - run: npm run test:registration
       - run: npm run test:full-journey
+      - run: npm run test:quality
       - run: npm run test:guides
       - run: npm run test:project-workbench
       - run: npm run test:compact-bom

@@ -51,7 +51,10 @@ async function departmentValue(tx: TransactionClient, id: unknown) {
     .from(npiDepartments)
     .where(eq(npiDepartments.id, uuidValue(id)))
   if (!department || !Object.hasOwn(departmentCategories, department.role))
-    throw new NpiError('VALIDATION_ERROR', '请选择有效的设计、生产或采购部门')
+    throw new NpiError(
+      'VALIDATION_ERROR',
+      '请选择有效的设计、生产、采购或质量部门',
+    )
   return department
 }
 export async function registerAccount(
@@ -129,19 +132,17 @@ export async function registerAccount(
     await tx
       .insert(accountRegistrations)
       .values({ userId: user!.id, departmentId })
-    await tx
-      .insert(accountEvents)
-      .values({
-        targetId: user!.id,
-        action: 'REGISTRATION_SUBMITTED',
-        detail: {
-          name,
-          email,
-          departmentId,
-          departmentName: department.name,
-          role: department.role,
-        },
-      })
+    await tx.insert(accountEvents).values({
+      targetId: user!.id,
+      action: 'REGISTRATION_SUBMITTED',
+      detail: {
+        name,
+        email,
+        departmentId,
+        departmentName: department.name,
+        role: department.role,
+      },
+    })
     return { status: 'pending' as const }
   })
 }

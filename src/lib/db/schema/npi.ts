@@ -66,7 +66,7 @@ export const npiDepartments = pgTable('npi_departments', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 100 }).notNull().unique(),
   role: varchar('role', { length: 30 })
-    .$type<'technical' | 'manufacturing' | 'procurement'>()
+    .$type<'technical' | 'manufacturing' | 'procurement' | 'quality'>()
     .notNull(),
   version: integer('version').notNull().default(1),
   createdAt: created(),
@@ -78,7 +78,12 @@ export const npiUserRoles = pgTable('npi_user_roles', {
     .references(() => users.id, { onDelete: 'cascade' }),
   role: varchar('role', { length: 30 })
     .$type<
-      'technical' | 'manufacturing' | 'procurement' | 'supervisor' | 'admin'
+      | 'technical'
+      | 'manufacturing'
+      | 'procurement'
+      | 'quality'
+      | 'supervisor'
+      | 'admin'
     >()
     .notNull(),
 })
@@ -335,6 +340,46 @@ export const npiLifecycleRecords = pgTable(
   },
   (t) => [index('npi_lifecycle_project').on(t.programId, t.kind, t.createdAt)],
 )
+export const npiQualityRecords = pgTable(
+  'npi_quality_records',
+  {
+    id: uuid('id').primaryKey(),
+    programId: uuid('program_id')
+      .notNull()
+      .references(() => npiProjects.programId, { onDelete: 'restrict' }),
+    kind: varchar('kind', { length: 30 })
+      .$type<'incoming' | 'process' | 'sample'>()
+      .notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    performedDate: date('performed_date'),
+    status: varchar('status', { length: 30 })
+      .$type<'draft' | 'recorded' | 'voided'>()
+      .notNull()
+      .default('draft'),
+    result: varchar('result', { length: 30 })
+      .$type<'' | 'pass' | 'fail' | 'conditional'>()
+      .notNull()
+      .default(''),
+    data: jsonb('data').$type<Record<string, string>>().notNull().default({}),
+    exceptionStatus: varchar('exception_status', { length: 30 })
+      .$type<'none' | 'open' | 'closed'>()
+      .notNull()
+      .default('none'),
+    resolution: text('resolution').notNull().default(''),
+    version: integer('version').notNull().default(1),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    updatedBy: uuid('updated_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: created(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index('npi_quality_project').on(t.programId, t.kind, t.createdAt)],
+)
 export const npiAttachments = pgTable(
   'npi_attachments',
   {
@@ -348,6 +393,9 @@ export const npiAttachments = pgTable(
     issueId: uuid('issue_id').references(() => npiIssues.id),
     lifecycleRecordId: uuid('lifecycle_record_id').references(
       () => npiLifecycleRecords.id,
+    ),
+    qualityRecordId: uuid('quality_record_id').references(
+      () => npiQualityRecords.id,
     ),
     analysis: text('analysis').notNull().default(''),
     conclusion: varchar('conclusion', { length: 30 }).notNull().default(''),

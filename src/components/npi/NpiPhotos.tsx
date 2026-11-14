@@ -135,7 +135,7 @@ export function NpiPhotos({
           data.set('title', photo.title.trim() || photo.file.name)
           data.set('category', categoryRef.current)
           data.set('requestId', photo.id)
-          if (scope.kind === 'lifecycle')
+          if (['lifecycle', 'quality'].includes(scope.kind))
             data.set('expectedRecordVersion', String(latest.recordVersion))
           await api(path, 'POST', data)
           if (!mounted.current) return

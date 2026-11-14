@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const moduleInfo = {
+  quality: {
+    label: '质量管理',
+    title: '质量管理',
+    description: '按项目维护来料检验、过程检验和样机报告，跟进质量异常。',
+  },
   guides: {
     label: '流程与 SOP',
     title: '流程与 SOP',
@@ -59,12 +64,14 @@ export const moduleInfo = {
 } as const
 export type ModuleId = keyof typeof moduleInfo
 export function navigationFor(role: string): Array<ModuleId> {
+  if (role === 'quality') return ['quality', 'guides']
   if (role === 'procurement') return ['procurement', 'guides']
   return [
     'dashboard',
     'projects',
     'manufacturing',
     'purchasing',
+    ...(role === 'admin' ? (['quality'] as const) : []),
     'guides',
     ...(role === 'admin' ? (['settings'] as const) : []),
   ]

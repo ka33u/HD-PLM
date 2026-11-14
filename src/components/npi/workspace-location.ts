@@ -7,6 +7,7 @@ export const projectTabs = [
   'kit',
   'bom',
   'issues',
+  'quality',
   'files',
   'history',
 ] as const

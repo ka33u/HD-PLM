@@ -68,19 +68,20 @@ try {
     )
   })
 
-  await test('all five roles can read all three SOPs and download byte-identical originals', async () => {
+  await test('all six roles can read all four SOPs and download byte-identical originals', async () => {
     for (const role of [
       'admin',
       'supervisor',
       'technical',
       'manufacturing',
       'procurement',
+      'quality',
     ]) {
       assert(navigationFor(role).includes('guides'))
       const catalog = (await f.call(role, '/guides')) as GuideCatalog
       assert.deepEqual(
         catalog.guides.map((x) => x.pages.length),
-        [17, 12, 11],
+        [17, 12, 11, 14],
       )
       assert(!('assets' in catalog.guides[0]!))
       for (const guide of catalog.guides) {
@@ -183,6 +184,7 @@ try {
       ['technical', 'design', '设计部', 17],
       ['manufacturing', 'production', '生产部', 12],
       ['procurement', 'procurement', '采购部', 11],
+      ['quality', 'quality', '质量部', 14],
     ] as const) {
       const context = await browser.newContext({
         viewport: { width: 1440, height: 1000 },
@@ -336,7 +338,7 @@ try {
           .locator('.npi-lifecycle-heading')
           .getByRole('button', { name: '流程与 SOP', exact: true })
           .click()
-        await expect(page.locator('.npi-guide-card')).toHaveCount(3)
+        await expect(page.locator('.npi-guide-card')).toHaveCount(4)
       }
       assert.deepEqual(errors, [])
       await context.close()

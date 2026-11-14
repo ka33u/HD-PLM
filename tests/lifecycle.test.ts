@@ -587,7 +587,7 @@ try {
     await delay(200)
   }
   browser = await chromium.launch(process.env.CI ? {} : { channel: 'chrome' })
-  await test('browser: five project tabs, owner-only onsite test entry, report analysis, immutable review and mobile layout', async () => {
+  await test('browser: six project tabs, owner-only onsite test entry, report analysis, immutable review and mobile layout', async () => {
     const pid = await f.project(),
       context = await browser!.newContext({
         viewport: { width: 1440, height: 960 },
@@ -599,7 +599,7 @@ try {
       errors: string[] = []
     p.on('pageerror', (e) => errors.push(e.message))
     await p.goto(`${root}/npi?view=projects&project=${pid}&tab=overview`)
-    await expect(p.getByRole('tablist').first().getByRole('tab')).toHaveCount(5)
+    await expect(p.getByRole('tablist').first().getByRole('tab')).toHaveCount(6)
     await expect(
       p
         .getByRole('navigation', { name: '主导航' })

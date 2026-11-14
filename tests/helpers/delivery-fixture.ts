@@ -30,6 +30,8 @@ export async function deliveryFixture(
     procurement: 'procurement',
     supervisor: 'supervisor',
     admin: 'admin',
+    quality: 'quality',
+    qualityPeer: 'quality',
     peer: 'manufacturing',
     buyerPeer: 'procurement',
     outsider: 'procurement',

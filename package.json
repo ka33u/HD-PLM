@@ -1,6 +1,6 @@
 {
   "name": "hd-plm",
-  "version": "4.2.2",
+  "version": "4.3.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -40,7 +40,8 @@
     "test:mobile-photos": "node --import tsx --test tests/mobile-photos.test.ts",
     "test:registration": "node --import tsx --test tests/registration.test.ts",
     "test:full-journey": "node --import tsx --test tests/full-journey.test.ts",
-    "test:guides": "node --import tsx --test tests/guides.test.ts"
+    "test:guides": "node --import tsx --test tests/guides.test.ts",
+    "test:quality": "node --import tsx --test tests/quality.test.ts tests/quality-browser.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",

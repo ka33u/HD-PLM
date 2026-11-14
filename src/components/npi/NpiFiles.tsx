@@ -52,7 +52,7 @@ export function NpiFiles({
   const [previewId, setPreviewId] = useState<string | null>(null)
   const initialCategory =
     defaultCategory ||
-    (scope.kind === 'lifecycle'
+    (['lifecycle', 'quality'].includes(scope.kind)
       ? 'report'
       : scope.kind === 'issue'
         ? 'issue'
@@ -126,7 +126,7 @@ export function NpiFiles({
       return
     }
     input.set('requestId', requestId.current)
-    if (scope.kind === 'lifecycle')
+    if (['lifecycle', 'quality'].includes(scope.kind))
       input.set('expectedRecordVersion', String(lifecycleVersion))
     const token = begin('upload')
     if (!token) return
@@ -163,7 +163,7 @@ export function NpiFiles({
         <h3>
           {scope.kind === 'project'
             ? '项目资料'
-            : scope.kind === 'lifecycle'
+            : ['lifecycle', 'quality'].includes(scope.kind)
               ? '报告与现场依据'
               : scope.kind === 'issue'
                 ? '问题附件与照片'
@@ -206,7 +206,7 @@ export function NpiFiles({
           api={api}
           scope={scope}
           category={
-            scope.kind === 'lifecycle'
+            ['lifecycle', 'quality'].includes(scope.kind)
               ? 'evidence'
               : scope.kind === 'issue'
                 ? 'issue'
@@ -228,7 +228,10 @@ export function NpiFiles({
       {data?.canUpload && !readOnly && (
         <details
           className="npi-file-upload-options"
-          open={scope.kind !== 'lifecycle' || initialCategory === 'report'}
+          open={
+            !['lifecycle', 'quality'].includes(scope.kind) ||
+            initialCategory === 'report'
+          }
         >
           <summary>上传报告或其他文件</summary>
           <form onSubmit={upload} className="npi-file-upload">
@@ -254,7 +257,7 @@ export function NpiFiles({
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
-                  {scope.kind === 'lifecycle' ? (
+                  {['lifecycle', 'quality'].includes(scope.kind) ? (
                     <>
                       <option value="report">报告及分析</option>
                       <option value="evidence">现场照片 / 客户反馈依据</option>
@@ -271,35 +274,36 @@ export function NpiFiles({
                   )}
                 </select>
               </label>
-              {scope.kind === 'lifecycle' && category === 'report' && (
-                <>
-                  <label>
-                    报告分析
-                    <textarea
-                      name="analysis"
-                      aria-label="报告分析"
-                      maxLength={8000}
-                      rows={3}
-                      required
-                      placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
-                    />
-                  </label>
-                  <label>
-                    报告结论
-                    <select
-                      name="conclusion"
-                      aria-label="报告结论"
-                      defaultValue=""
-                      required
-                    >
-                      <option value="">请选择</option>
-                      <option value="pass">通过</option>
-                      <option value="fail">不通过</option>
-                      <option value="continue">需要补充验证</option>
-                    </select>
-                  </label>
-                </>
-              )}
+              {['lifecycle', 'quality'].includes(scope.kind) &&
+                category === 'report' && (
+                  <>
+                    <label>
+                      报告分析
+                      <textarea
+                        name="analysis"
+                        aria-label="报告分析"
+                        maxLength={8000}
+                        rows={3}
+                        required
+                        placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
+                      />
+                    </label>
+                    <label>
+                      报告结论
+                      <select
+                        name="conclusion"
+                        aria-label="报告结论"
+                        defaultValue=""
+                        required
+                      >
+                        <option value="">请选择</option>
+                        <option value="pass">通过</option>
+                        <option value="fail">不通过</option>
+                        <option value="continue">需要补充验证</option>
+                      </select>
+                    </label>
+                  </>
+                )}
               <label>
                 选择文件或照片
                 <input
@@ -400,7 +404,7 @@ export function NpiFiles({
                         try {
                           await api(`/file-archive/${f.id}`, 'POST', {
                             reason,
-                            ...(scope.kind === 'lifecycle'
+                            ...(['lifecycle', 'quality'].includes(scope.kind)
                               ? { expectedRecordVersion: lifecycleVersion }
                               : {}),
                           })

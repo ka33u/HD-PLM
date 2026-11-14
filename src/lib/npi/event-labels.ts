@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const eventLabels: Record<string, string> = {
+  QUALITY_SAVE: '保存质量草稿',
+  QUALITY_SUBMIT: '提交质量记录',
+  QUALITY_REOPEN: '撤回质量记录编辑',
+  QUALITY_RESOLVE: '关闭质量异常',
+  QUALITY_VOID: '作废质量记录',
   LIFECYCLE_SAVED: '保存流程记录',
   LIFECYCLE_SUBMITTED: '提交流程结论',
   LIFECYCLE_CANCELLED: '取消流程草稿',
@@ -36,6 +41,16 @@ export const eventLabels: Record<string, string> = {
   DETAILS_UPDATED: '补充供应商 / 备注',
 }
 export const eventGroups = {
+  quality: {
+    label: '质量记录',
+    actions: [
+      'QUALITY_SAVE',
+      'QUALITY_SUBMIT',
+      'QUALITY_REOPEN',
+      'QUALITY_RESOLVE',
+      'QUALITY_VOID',
+    ],
+  },
   lifecycle: {
     label: '设计试验与试用',
     actions: ['LIFECYCLE_SAVED', 'LIFECYCLE_SUBMITTED', 'LIFECYCLE_CANCELLED'],

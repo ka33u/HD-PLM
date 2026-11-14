@@ -8,7 +8,7 @@ const catalog = JSON.parse(
 )
 for (const guide of catalog) {
   if (
-    !['design', 'production', 'procurement'].includes(guide.id) ||
+    !['design', 'production', 'procurement', 'quality'].includes(guide.id) ||
     !guide.pages.length
   )
     throw new Error('Invalid SOP catalog')

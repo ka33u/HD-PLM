@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { qualityProject } from './quality-service'
 import { ownsWork } from './work-ownership'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
@@ -22,7 +23,7 @@ import type { Actor } from './service'
 import type { TransactionClient } from '../db'
 type Run = TransactionClient | typeof db
 export type FileScope = {
-  kind: 'project' | 'tracking' | 'issue' | 'lifecycle'
+  kind: 'project' | 'tracking' | 'issue' | 'lifecycle' | 'quality'
   id: string
 }
 const deny = () => {
@@ -32,7 +33,7 @@ const missing = () => {
   throw new NpiError('FILE_NOT_FOUND', '资料不存在或已不可用', 404)
 }
 export function fileScope(kind: string, id: string): FileScope {
-  if (!['project', 'tracking', 'issue', 'lifecycle'].includes(kind))
+  if (!['project', 'tracking', 'issue', 'lifecycle', 'quality'].includes(kind))
     throw new NpiError('VALIDATION_ERROR', '资料归属无效')
   return { kind: kind as FileScope['kind'], id: uuidValue(id) }
 }
@@ -48,6 +49,33 @@ async function access(
   canUpload: boolean
   canArchive: boolean
 }> {
+  if (scope.kind === 'quality') {
+    const [record] = await run
+      .select()
+      .from(s.npiQualityRecords)
+      .where(eq(s.npiQualityRecords.id, scope.id))
+    if (!record) return missing()
+    const project = await qualityProject(run, actor, record.programId, edit)
+    const [latest] = await run
+      .select()
+      .from(s.npiQualityRecords)
+      .where(eq(s.npiQualityRecords.id, scope.id))
+    const allowed =
+      ['quality', 'admin'].includes(actor.role) &&
+      project.currentNpiStage !== 'completed' &&
+      latest?.status === 'draft'
+    if (edit && !allowed)
+      throw new NpiError(
+        'INVALID_STATE_TRANSITION',
+        '请先撤回编辑，再维护照片或报告',
+      )
+    return {
+      programId: project.programId,
+      project,
+      canUpload: allowed,
+      canArchive: allowed,
+    }
+  }
   let programId = scope.id,
     ownerId: string | null = null,
     active = true,
@@ -132,18 +160,21 @@ async function access(
   }
 }
 const condition = (scope: FileScope) =>
-  scope.kind === 'tracking'
-    ? eq(s.npiAttachments.trackingItemId, scope.id)
-    : scope.kind === 'lifecycle'
-      ? eq(s.npiAttachments.lifecycleRecordId, scope.id)
-      : scope.kind === 'issue'
-        ? eq(s.npiAttachments.issueId, scope.id)
-        : and(
-            eq(s.npiAttachments.programId, scope.id),
-            isNull(s.npiAttachments.trackingItemId),
-            isNull(s.npiAttachments.issueId),
-            isNull(s.npiAttachments.lifecycleRecordId),
-          )
+  scope.kind === 'quality'
+    ? eq(s.npiAttachments.qualityRecordId, scope.id)
+    : scope.kind === 'tracking'
+      ? eq(s.npiAttachments.trackingItemId, scope.id)
+      : scope.kind === 'lifecycle'
+        ? eq(s.npiAttachments.lifecycleRecordId, scope.id)
+        : scope.kind === 'issue'
+          ? eq(s.npiAttachments.issueId, scope.id)
+          : and(
+              eq(s.npiAttachments.programId, scope.id),
+              isNull(s.npiAttachments.trackingItemId),
+              isNull(s.npiAttachments.issueId),
+              isNull(s.npiAttachments.lifecycleRecordId),
+              isNull(s.npiAttachments.qualityRecordId),
+            )
 
 export function attachmentPath(key: string) {
   if (!/^[a-f0-9-]{36}\.(pdf|png|jpg|jpeg|webp|docx|xlsx)$/.test(key))
@@ -179,12 +210,17 @@ export async function listFiles(userId: string, scope: FileScope) {
     .where(condition(scope))
     .orderBy(desc(s.npiAttachments.createdAt))
   const [record] =
-    scope.kind === 'lifecycle'
+    scope.kind === 'quality'
       ? await db
-          .select({ version: s.npiLifecycleRecords.version })
-          .from(s.npiLifecycleRecords)
-          .where(eq(s.npiLifecycleRecords.id, scope.id))
-      : []
+          .select({ version: s.npiQualityRecords.version })
+          .from(s.npiQualityRecords)
+          .where(eq(s.npiQualityRecords.id, scope.id))
+      : scope.kind === 'lifecycle'
+        ? await db
+            .select({ version: s.npiLifecycleRecords.version })
+            .from(s.npiLifecycleRecords)
+            .where(eq(s.npiLifecycleRecords.id, scope.id))
+        : []
   return {
     recordVersion: record?.version,
     files: rows
@@ -211,7 +247,7 @@ export async function uploadFile(
     : f.name.slice(0, 200)
   const category = input.category
   if (
-    !(scope.kind === 'lifecycle'
+    !(['lifecycle', 'quality'].includes(scope.kind)
       ? ['report', 'evidence'].includes(String(category))
       : scope.kind === 'project'
         ? category === 'technical'
@@ -233,7 +269,7 @@ export async function uploadFile(
   const requestHash = createHash('sha256')
     .update(
       JSON.stringify(
-        scope.kind === 'lifecycle'
+        ['lifecycle', 'quality'].includes(scope.kind)
           ? [scope, title, category, f.name, fileHash, analysis, conclusion]
           : [scope, title, category, f.name, fileHash],
       ),
@@ -269,6 +305,18 @@ export async function uploadFile(
           )
         return summary(existing)
       }
+      if (scope.kind === 'quality') {
+        const [record] = await tx
+          .select()
+          .from(s.npiQualityRecords)
+          .where(eq(s.npiQualityRecords.id, scope.id))
+        versionCheck(
+          record!.version,
+          input.expectedRecordVersion === undefined
+            ? undefined
+            : Number(input.expectedRecordVersion),
+        )
+      }
       if (scope.kind === 'lifecycle') {
         const [record] = await tx
           .select()
@@ -293,6 +341,7 @@ export async function uploadFile(
         trackingItemId: scope.kind === 'tracking' ? scope.id : null,
         issueId: scope.kind === 'issue' ? scope.id : null,
         lifecycleRecordId: scope.kind === 'lifecycle' ? scope.id : null,
+        qualityRecordId: scope.kind === 'quality' ? scope.id : null,
         analysis,
         conclusion,
         name: f.name,
@@ -321,6 +370,15 @@ export async function uploadFile(
           .set({ version: sql`${s.npiProjects.version} + 1` })
           .where(eq(s.npiProjects.programId, permission.programId))
       }
+      if (scope.kind === 'quality')
+        await tx
+          .update(s.npiQualityRecords)
+          .set({
+            version: sql`${s.npiQualityRecords.version} + 1`,
+            updatedBy: actor.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(s.npiQualityRecords.id, scope.id))
       await event(tx, actor, permission.programId, scope.id, 'FILE_UPLOADED', {
         linkId: id,
         fileName: f.name,
@@ -349,13 +407,15 @@ export async function uploadFile(
   }
 }
 const scopeOf = (r: Row): FileScope =>
-  r.file.lifecycleRecordId
-    ? { kind: 'lifecycle', id: r.file.lifecycleRecordId }
-    : r.file.trackingItemId
-      ? { kind: 'tracking', id: r.file.trackingItemId }
-      : r.file.issueId
-        ? { kind: 'issue', id: r.file.issueId }
-        : { kind: 'project', id: r.file.programId }
+  r.file.qualityRecordId
+    ? { kind: 'quality', id: r.file.qualityRecordId }
+    : r.file.lifecycleRecordId
+      ? { kind: 'lifecycle', id: r.file.lifecycleRecordId }
+      : r.file.trackingItemId
+        ? { kind: 'tracking', id: r.file.trackingItemId }
+        : r.file.issueId
+          ? { kind: 'issue', id: r.file.issueId }
+          : { kind: 'project', id: r.file.programId }
 export async function downloadFile(userId: string, id: string) {
   const [r] = await query(db).where(eq(s.npiAttachments.id, uuidValue(id)))
   if (!r) return missing()
@@ -413,6 +473,21 @@ export async function archiveFile(
         .update(s.npiProjects)
         .set({ version: sql`${s.npiProjects.version} + 1` })
         .where(eq(s.npiProjects.programId, r.file.programId))
+    }
+    if (r.file.qualityRecordId) {
+      const [record] = await tx
+        .select()
+        .from(s.npiQualityRecords)
+        .where(eq(s.npiQualityRecords.id, r.file.qualityRecordId))
+      versionCheck(record!.version, input.expectedRecordVersion)
+      await tx
+        .update(s.npiQualityRecords)
+        .set({
+          version: record!.version + 1,
+          updatedBy: actor.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(s.npiQualityRecords.id, record!.id))
     }
     const reason = textValue(input.reason, '归档原因', 2000)
     const [updated] = await tx

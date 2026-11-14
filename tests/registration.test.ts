@@ -115,6 +115,7 @@ try {
     assert.deepEqual(result.data.departments.map((d: any) => d.role).sort(), [
       'manufacturing',
       'procurement',
+      'quality',
       'technical',
     ])
     for (const d of result.data.departments)

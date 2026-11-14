@@ -14,6 +14,7 @@ export const roleNames = {
   technical: '技术负责人',
   manufacturing: '制造负责人',
   procurement: '采购责任人',
+  quality: '质量人员',
   supervisor: '主管',
 } as const
 export type AccountRole = keyof typeof roleNames

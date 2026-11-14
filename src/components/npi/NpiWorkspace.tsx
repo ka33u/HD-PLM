@@ -1,3 +1,8 @@
+import {
+  NpiQualityWorkbench,
+  NpiQualityPanel,
+  NpiQualityNotice,
+} from './NpiQuality'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NpiProjectWorkbench } from './NpiProjectWorkbench'
 import { ownsWork } from '../../lib/npi/work-ownership'
@@ -99,6 +104,7 @@ import './compact-bom.css'
 import './project-workbench.css'
 
 const moduleIcons = {
+  quality: FileSpreadsheet,
   guides: BookOpen,
   trash: Trash2,
   dashboard: LayoutDashboard,
@@ -125,6 +131,7 @@ const roleNames: Record<string, string> = {
   technical: '技术负责人',
   manufacturing: '制造负责人',
   procurement: '采购',
+  quality: '质量',
   supervisor: '主管',
 }
 const sourceNames: Record<string, string> = {
@@ -425,12 +432,17 @@ export function NpiWorkspace() {
                 ? 'manufacturing'
                 : next.actor.role === 'procurement'
                   ? 'procurement'
-                  : 'dashboard',
+                  : next.actor.role === 'quality'
+                    ? 'quality'
+                    : 'dashboard',
           )
         }
         setMeta(next)
         const loadProjects = !configurationOnly || next.actor.role !== 'admin'
-        if (next.actor.role !== 'procurement' && loadProjects)
+        if (
+          !['procurement', 'quality'].includes(next.actor.role) &&
+          loadProjects
+        )
           setDashboard(await api<NpiDashboard>('/dashboard'))
         setWorkbenchRevision((n) => n + 1)
         if (loadProjects && projectId.current) {
@@ -543,10 +555,17 @@ export function NpiWorkspace() {
     if (!route.projectId) return
     if (
       route.view &&
-      ['manufacturing', 'purchasing', 'procurement'].includes(route.view) &&
+      ['manufacturing', 'purchasing', 'procurement', 'quality'].includes(
+        route.view,
+      ) &&
       navigationFor(meta.actor.role).includes(route.view)
     ) {
       setWorkbenchProjectId(route.projectId)
+      return
+    }
+    if (meta.actor.role === 'quality') {
+      window.history.replaceState(null, '', '/npi?view=quality')
+      lastNavigationUrl.current = '/npi?view=quality'
       return
     }
     if (meta.actor.role === 'procurement') {
@@ -1319,14 +1338,22 @@ export function NpiWorkspace() {
         ? requested
         : meta?.actor.role === 'procurement'
           ? 'procurement'
-          : 'dashboard'
+          : meta?.actor.role === 'quality'
+            ? 'quality'
+            : 'dashboard'
       if (
         route.projectId &&
-        ['manufacturing', 'purchasing', 'procurement'].includes(destination)
+        ['manufacturing', 'purchasing', 'procurement', 'quality'].includes(
+          destination,
+        )
       ) {
         navigate(destination, false)
         setWorkbenchProjectId(route.projectId)
-      } else if (meta && meta.actor.role !== 'procurement' && route.projectId) {
+      } else if (
+        meta &&
+        !['procurement', 'quality'].includes(meta.actor.role) &&
+        route.projectId
+      ) {
         if (project?.id === route.projectId) {
           projectRequest.current++
           setLoading(false)
@@ -1573,6 +1600,19 @@ export function NpiWorkspace() {
                 正在读取业务数据…
               </p>
             )}
+          {meta && view === 'quality' && (
+            <NpiQualityWorkbench
+              api={api}
+              projectId={workbenchProjectId}
+              revision={workbenchRevision}
+              onSelect={(id) => {
+                setWorkbenchProjectId(id)
+                const url = `/npi?view=quality${id ? `&project=${id}` : ''}`
+                window.history.pushState(null, '', url)
+                lastNavigationUrl.current = url
+              }}
+            />
+          )}
           {meta && view === 'guides' && (
             <NpiGuides api={api} role={meta.actor.role} />
           )}
@@ -1817,6 +1857,7 @@ export function NpiWorkspace() {
                     交付任务
                   </TabsTrigger>
                   <TabsTrigger value="bom">BOM明细</TabsTrigger>
+                  <TabsTrigger value="quality">质量记录</TabsTrigger>
                   <TabsTrigger value="issues">
                     问题闭环{' '}
                     {project.openIssueCount
@@ -1867,7 +1908,16 @@ export function NpiWorkspace() {
                     </button>
                   </div>
                 )}
+                <TabsContent value="quality">
+                  <NpiQualityPanel api={api} projectId={project.id} />
+                </TabsContent>
                 <TabsContent value="overview">
+                  <NpiQualityNotice
+                    key={project.id + project.version}
+                    api={api}
+                    projectId={project.id}
+                    onOpen={() => changeProjectTab('quality')}
+                  />
                   <NpiLifecycle
                     key={project.id}
                     project={project}

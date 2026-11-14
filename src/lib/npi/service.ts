@@ -133,7 +133,7 @@ export async function getActor(
             eq(s.npiDepartments.id, mapping.departmentId),
             eq(
               s.npiDepartments.role,
-              role as 'technical' | 'manufacturing' | 'procurement',
+              role as 'technical' | 'manufacturing' | 'procurement' | 'quality',
             ),
           ),
         )
@@ -199,7 +199,7 @@ export async function owner(tx: Tx, id: unknown, accepted: Array<Role>) {
 }
 export async function metadata(userId: string) {
   const actor = await getActor(userId)
-  if (actor.role === 'procurement')
+  if (['procurement', 'quality'].includes(actor.role))
     return {
       actor,
       users: [],
