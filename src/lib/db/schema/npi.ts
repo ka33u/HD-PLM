@@ -316,7 +316,7 @@ export const npiLifecycleRecords = pgTable(
     plannedDate: date('planned_date'),
     performedDate: date('performed_date'),
     status: varchar('status', { length: 30 })
-      .$type<'draft' | 'submitted' | 'cancelled'>()
+      .$type<'draft' | 'recorded' | 'submitted' | 'cancelled'>()
       .notNull()
       .default('draft'),
     result: varchar('result', { length: 30 })

@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import 'dotenv/config'
@@ -47,6 +48,7 @@ for (const role of [
   const { sessionToken } = await SessionManager.createSession(id)
   accounts[role] = { id, token: sessionToken }
 }
+await manufacturingTestDepartments(drizzle(client), [accounts.manufacturing!.id])
 await service.seedNpiConfig()
 async function call(
   role: string,
@@ -1935,6 +1937,7 @@ try {
     const newMfg = crypto.randomUUID()
     await client`insert into users(id,email,name,active,must_change_password) values(${newMfg},${newMfg + '@test.invalid'},'接任制造',true,false)`
     await client`insert into npi_user_roles(user_id,role) values(${newMfg},'manufacturing')`
+    await manufacturingTestDepartments(drizzle(client), [newMfg])
     accounts.nextMfg = {
       id: newMfg,
       token: (await SessionManager.createSession(newMfg)).sessionToken,

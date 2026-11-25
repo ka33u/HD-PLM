@@ -7,7 +7,7 @@ export const eventLabels: Record<string, string> = {
   QUALITY_VOID: '作废质量记录',
   LIFECYCLE_SAVED: '保存流程记录',
   LIFECYCLE_SUBMITTED: '提交流程结论',
-  LIFECYCLE_CANCELLED: '取消流程草稿',
+  LIFECYCLE_CANCELLED: '作废过程记录',
   PROJECT_TRASHED: '项目移入回收站',
   PROJECT_RESTORED: '恢复项目',
   PROJECT_CREATED: '创建新品项目',

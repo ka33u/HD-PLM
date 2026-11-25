@@ -14,6 +14,7 @@ import {
   getActor,
   loadProject,
   owner,
+  manufacturingOwner,
 } from './service'
 import type { TransactionClient } from '../db'
 
@@ -54,9 +55,7 @@ async function prepare(
     if (typeof input[key] !== 'boolean')
       throw new NpiError('VALIDATION_ERROR', '请明确选择继承范围')
   const technical = await owner(tx, input.technicalOwnerId, ['technical'])
-  const manufacturing = await owner(tx, input.manufacturingOwnerId, [
-    'manufacturing',
-  ])
+  const manufacturing = await manufacturingOwner(tx, input.manufacturingOwnerId)
   const profile = prepareProjectProfile(program, {
     ...input,
     orderQuantity: input.orderQuantity ?? '1',

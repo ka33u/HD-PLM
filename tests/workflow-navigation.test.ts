@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Actual multi-role browser workflow against a fresh database and built application.
@@ -61,6 +62,7 @@ for (const role of [
     token: (await createSession(user!.id)).sessionToken,
   }
 }
+await manufacturingTestDepartments(db, [actors.manufacturing!.id])
 async function call(
   role: string,
   path: string,
@@ -295,7 +297,7 @@ try {
       await expect(dialog.getByRole('heading')).toHaveText('推进至' + label)
       if (next === 'manufacturing')
         await dialog.getByLabel('图纸实际完成日期').fill('2026-09-01')
-      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByRole('button', { name: '确认推进', exact: true }).click()
       await expect(dialog).toHaveCount(0)
       await expect.poll(async () => (await detail()).currentNpiStage).toBe(next)
       await expect(guide(page)).toBeVisible()

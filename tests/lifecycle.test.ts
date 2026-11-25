@@ -115,205 +115,264 @@ async function closeIssue(id: string) {
   }
 }
 try {
-  await test('only the current project owner writes records; drafts, versions and stage gates are enforced', async () => {
-    await f.importBom(projectId, 2)
-    const id = crypto.randomUUID(),
-      payload = {
-        ...lifecyclePayload('design'),
-        expectedVersion: 0,
-        action: 'draft',
-      }
-    for (const role of ['admin', 'supervisor', 'manufacturing', 'peer'])
+  await test('empty records never block advancing; owner, sequence, dates and versions still apply', async () => {
+    assert.equal((await f.detail(projectId)).lifecycle.pendingCount, 0)
+    assert.deepEqual((await life()).gate.blockers, [])
+    const p = await f.detail(projectId)
+    for (const role of ['admin', 'supervisor', 'manufacturing', 'quality']) {
       await f.call(
         role,
-        `/projects/${projectId}/lifecycle/${id}`,
-        'PUT',
-        payload,
+        `/projects/${projectId}/stage`,
+        'PATCH',
+        {
+          expectedVersion: p.version,
+          currentNpiStage: 'manufacturing',
+          drawingCompleteDate: today(),
+        },
         403,
       )
-    await f.call(
-      'procurement',
-      `/projects/${projectId}/lifecycle`,
-      'GET',
-      undefined,
-      403,
-    )
-    await f.call('technical', `/projects/${projectId}/lifecycle/${id}`, 'PUT', {
-      ...payload,
-      data: { fields: {}, measurements: [] },
-      performedDate: '',
-    })
-    await submit(id, {}, projectId, 422)
-    await advance('manufacturing', 409)
-    await photo(id)
-    const old = await record(id)
-    await f.call('technical', `/projects/${projectId}/lifecycle/${id}`, 'PUT', {
-      ...payload,
-      expectedVersion: old.version,
-      action: 'submit',
-    })
+      await f.call(
+        role,
+        `/projects/${projectId}/lifecycle/${crypto.randomUUID()}`,
+        'PUT',
+        { ...lifecyclePayload('design'), expectedVersion: 0, action: 'record' },
+        403,
+      )
+    }
+    await advance('prototype', 400)
     await f.call(
       'technical',
-      `/projects/${projectId}/lifecycle/${id}`,
-      'PUT',
-      { ...payload, expectedVersion: old.version },
-      409,
+      `/projects/${projectId}/stage`,
+      'PATCH',
+      {
+        expectedVersion: p.version,
+        currentNpiStage: 'manufacturing',
+        drawingCompleteDate: '2099-01-01',
+      },
+      422,
     )
-    const frozen = await record(id)
-    await f.call(
-      'technical',
-      `/projects/${projectId}/lifecycle/${id}`,
-      'PUT',
-      { ...payload, expectedVersion: frozen.version },
-      409,
-    )
-    assert((await life()).gate.blockers.length === 0)
     await advance('manufacturing')
-    await save('manufacturing')
+    await f.call(
+      'technical',
+      `/projects/${projectId}/stage`,
+      'PATCH',
+      { expectedVersion: p.version, currentNpiStage: 'prototype' },
+      409,
+    )
+    await advance('design', 400)
     await advance('prototype')
-    await save('prototype')
     await advance('test')
+    await advance('trial')
+    assert.equal((await life()).records.length, 0)
+    await advance('completed', 409) // The whole-machine delivery remains unfinished.
+    const all = await f.detail(projectId)
+    await f.call('manufacturing', '/tracking/batch-reply', 'POST', {
+      operation: 'complete',
+      items: all.items.map((i: any) => ({
+        id: i.id,
+        expectedVersion: i.version,
+        date: today(),
+      })),
+    })
+    await advance('completed')
+    assert.equal((await f.detail(projectId)).currentNpiStage, 'completed')
+    await f.call(
+      'technical',
+      `/projects/${projectId}/lifecycle/${crypto.randomUUID()}`,
+      'PUT',
+      { ...lifecyclePayload('closure'), expectedVersion: 0, action: 'record' },
+      400,
+    )
   })
-  await test('report upload requires analysis and conclusion, preserves retry identity, and failed tests generate one issue', async () => {
-    const id = await save('test', 'draft', 'fail')
-    await f.call(
-      'technical',
-      `/files/lifecycle/${id}`,
-      'POST',
-      upload(1, 'report', 'fail', ''),
-      422,
-    )
-    await f.call(
-      'technical',
-      `/files/lifecycle/${id}`,
-      'POST',
-      upload(1, 'report', ''),
-      422,
-    )
+  await test('all six record kinds save with just title, date and content; files, results and detailed forms are optional', async () => {
+    const pid = await f.project()
+    for (const kind of [
+      'design',
+      'manufacturing',
+      'prototype',
+      'test',
+      'trial',
+      'closure',
+    ]) {
+      const id = crypto.randomUUID(),
+        payload = {
+          kind,
+          title: kind + '简要记录',
+          performedDate: today(),
+          data: { fields: { summary: '已核对当前进展，下周继续跟踪。' } },
+          expectedVersion: 0,
+          action: 'record',
+        }
+      await f.call(
+        'technical',
+        `/projects/${pid}/lifecycle/${id}`,
+        'PUT',
+        { ...payload, performedDate: '2099-01-01' },
+        422,
+      )
+      await f.call(
+        'technical',
+        `/projects/${pid}/lifecycle/${id}`,
+        'PUT',
+        { ...payload, data: { fields: { summary: '  ' } } },
+        422,
+      )
+      await f.call(
+        'technical',
+        `/projects/${pid}/lifecycle/${id}`,
+        'PUT',
+        payload,
+      )
+      const r = await record(id, pid)
+      assert.equal(r.status, 'recorded')
+      assert.equal(r.result, '')
+      assert.equal(r.files, 0)
+      assert.deepEqual(r.missing, [])
+    }
+    assert.deepEqual((await life(pid)).gate.blockers, [])
+    assert.equal((await f.detail(pid)).lifecycle.pendingCount, 0)
     assert.equal(
-      (await f.call('technical', `/files/lifecycle/${id}`)).files.length,
+      (await f.call('technical', `/projects/${pid}/issues`)).length,
       0,
+    )
+  })
+  await test('historical failures and unfinished drafts do not block progression; no conclusion creates an issue', async () => {
+    const pid = await f.project(),
+      id = await save('test', 'draft', 'fail', pid)
+    await submit(id, {}, pid)
+    const r = await record(id, pid)
+    assert.equal(r.result, 'fail')
+    assert.equal(r.issueId, null)
+    await save('design', 'draft', 'continue', pid)
+    for (const stage of ['manufacturing', 'prototype', 'test', 'trial']) {
+      assert.deepEqual((await life(pid)).gate.blockers, [])
+      const p = await f.detail(pid)
+      await f.call('technical', `/projects/${pid}/stage`, 'PATCH', {
+        expectedVersion: p.version,
+        currentNpiStage: stage,
+        drawingCompleteDate: today(),
+      })
+    }
+    assert.equal(
+      (await f.call('technical', `/projects/${pid}/issues`)).length,
+      0,
+    )
+    await f.call(
+      'technical',
+      `/projects/${pid}/lifecycle/${id}`,
+      'PUT',
+      { ...r, expectedVersion: r.version, action: 'record' },
+      409,
+    )
+  })
+  await test('saved records are editable with optional attachments, optimistic versions and audited voiding', async () => {
+    const pid = await f.project(),
+      id = await save('test', 'draft', 'pass', pid),
+      old = await record(id, pid)
+    await f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
+      ...old,
+      data: { fields: { summary: '简化编辑，原测项仍留存' } },
+      expectedVersion: old.version,
+      action: 'record',
+    })
+    let r = await record(id, pid)
+    assert.deepEqual(r.data.measurements, old.data.measurements)
+    assert.equal(r.data.fields.location, old.data.fields.location)
+    const form = photoForm(r.version),
+      file = await f.call(
+        'technical',
+        `/files/lifecycle/${id}`,
+        'POST',
+        form,
+        201,
+      )
+    assert.equal(
+      (await f.call('technical', `/files/lifecycle/${id}`, 'POST', form, 201))
+        .id,
+      file.id,
     )
     await f.call(
       'manufacturing',
       `/files/lifecycle/${id}`,
       'POST',
-      upload(1),
+      photoForm(r.version),
       403,
     )
-    const form = upload(
-      1,
-      'report',
-      'fail',
-      '转速超出约定限值，排查供电与参数设置后复测。',
-    )
-    const file = await f.call(
-      'technical',
-      `/files/lifecycle/${id}`,
-      'POST',
-      form,
-      201,
-    )
-    const same = await f.call(
-      'technical',
-      `/files/lifecycle/${id}`,
-      'POST',
-      form,
-      201,
-    )
-    assert.equal(file.id, same.id)
-    assert.equal((await record(id)).version, 2)
-    await photo(id)
-    const r = await record(id)
-    await submit(id, {
-      data: {
-        ...r.data,
-        measurements: [
-          { ...r.data.measurements[0], measured: '1500', verdict: 'fail' },
-        ],
-      },
-    })
-    const signed = await record(id)
-    assert(signed.issueId)
     await f.call(
       'technical',
-      `/projects/${projectId}/lifecycle/${id}`,
+      `/projects/${pid}/lifecycle/${id}`,
       'PUT',
-      { ...r, expectedVersion: r.version, action: 'submit' },
+      { ...r, expectedVersion: r.version, action: 'record' },
       409,
     )
-    assert.equal(
-      (await f.call('technical', `/projects/${projectId}/issues`)).length,
-      1,
+    r = await record(id, pid)
+    const results = await Promise.allSettled(
+      [1, 2].map((n) =>
+        f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
+          ...r,
+          title: '并发修改' + n,
+          expectedVersion: r.version,
+          action: 'record',
+        }),
+      ),
     )
-    await advance('trial', 409)
+    assert.equal(results.filter((x) => x.status === 'fulfilled').length, 1)
+    r = await record(id, pid)
+    await f.call('technical', `/file-archive/${file.id}`, 'POST', {
+      reason: '替换模糊照片',
+      expectedRecordVersion: r.version,
+    })
+    r = await record(id, pid)
     await f.call(
       'technical',
-      `/file-archive/${file.id}`,
-      'POST',
-      { reason: '试图覆盖已提交原报告', expectedRecordVersion: signed.version },
-      400,
+      `/projects/${pid}/lifecycle/${id}`,
+      'PUT',
+      { expectedVersion: r.version, action: 'cancel' },
+      422,
     )
+    await f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
+      expectedVersion: r.version,
+      action: 'cancel',
+      reason: '重复记录，保留原始内容',
+    })
+    assert.equal((await record(id, pid)).status, 'cancelled')
     await f.call(
       'technical',
       `/files/lifecycle/${id}`,
       'POST',
-      upload(signed.version),
+      photoForm(r.version + 1),
       400,
     )
-    const passed = await save('test', 'draft')
-    await f.call(
-      'technical',
-      `/files/lifecycle/${passed}`,
-      'POST',
-      upload(1),
-      201,
+    const events = await f.db
+      .select()
+      .from(f.s.npiEvents)
+      .where(eq(f.s.npiEvents.objectId, id))
+    assert(
+      events.some((e) => e.action === 'LIFECYCLE_SAVED' && e.detail.before),
     )
-    await photo(passed)
-    await submit(passed)
-    await advance('trial', 409)
-    await closeIssue(signed.issueId)
-    const planned = await save('test', 'draft')
-    await advance('trial', 409)
-    await f.call(
-      'technical',
-      `/projects/${projectId}/lifecycle/${planned}`,
-      'PUT',
-      {
-        expectedVersion: 1,
-        action: 'cancel',
-        reason: '相同试验已由上一份完整记录覆盖，取消重复计划',
-      },
-    )
-    await advance('trial')
+    assert(events.some((e) => e.action === 'LIFECYCLE_CANCELLED'))
   })
-  await test('customer follow-up, evidence and closure are separate from completion; no open issues or unfinished parts can be hidden', async () => {
-    const trial = await save('trial', 'draft', 'continue')
-    await submit(trial, {}, projectId, 422)
-    await f.call(
+  await test('manual issue closure, delivery completion and BOM review still protect project closure', async () => {
+    projectId = await f.project()
+    await f.importBom(projectId, 2)
+    for (const stage of ['manufacturing', 'prototype', 'test'])
+      await advance(stage)
+    const issue = await f.call(
       'technical',
-      `/files/lifecycle/${trial}`,
+      `/projects/${projectId}/issues`,
       'POST',
-      upload(1, 'evidence'),
+      {
+        title: '绕组温升偏高',
+        description: '需调整冷却通道后复测。',
+        severity: 'High',
+        ownerId: f.actors.technical!.id,
+        targetDate: today(),
+      },
       201,
     )
-    await photo(trial)
-    await submit(trial)
-    const signed = await record(trial)
-    assert(signed.issueId)
-    const finalTrial = await save('trial', 'draft')
-    await f.call(
-      'technical',
-      `/files/lifecycle/${finalTrial}`,
-      'POST',
-      upload(1, 'evidence'),
-      201,
-    )
-    await photo(finalTrial)
-    await submit(finalTrial)
-    await save('closure')
-    await advance('completed', 409)
-    await closeIssue(signed.issueId)
+    await advance('trial', 409)
+    await closeIssue(issue.id)
+    await advance('trial')
     await advance('completed', 409)
     const p = await f.detail(projectId)
     await f.call('manufacturing', '/tracking/batch-reply', 'POST', {
@@ -324,102 +383,61 @@ try {
         date: today(),
       })),
     })
+    // Simulate an unassigned current BOM row, independently of process notes.
+    const task = p.items.find((i: any) => i.bomItemId)
+    await f.db
+      .update(f.s.npiTrackingItems)
+      .set({ trackingEnabled: false, affectsKit: false })
+      .where(eq(f.s.npiTrackingItems.id, task.id))
+    await advance('completed', 409)
+    await f.db
+      .update(f.s.npiTrackingItems)
+      .set({ trackingEnabled: true, affectsKit: true })
+      .where(eq(f.s.npiTrackingItems.id, task.id))
     await advance('completed')
-    assert.equal((await f.detail(projectId)).currentNpiStage, 'completed')
-    assert.equal((await life()).canWrite, false)
-    await f.call(
-      'technical',
-      `/projects/${projectId}/lifecycle/${crypto.randomUUID()}`,
-      'PUT',
-      { ...lifecyclePayload('test'), expectedVersion: 0, action: 'draft' },
-      400,
-    )
-    assert.equal(
-      (await life()).records.filter(
-        (r: any) => r.kind === 'test' && r.status === 'submitted',
-      ).length,
-      2,
-    )
+    assert.equal((await life()).records.length, 0)
   })
-  await test('trial exemption needs a documented basis; report audit failures roll back files, versions and derived issues', async () => {
+  await test('a failed audit atomically rolls back record and attachment changes', async () => {
     const pid = await f.project(),
-      id = await save('trial', 'draft', 'not_applicable', pid)
-    await submit(id, {}, pid, 422)
-    await f.call(
-      'technical',
-      `/files/lifecycle/${id}`,
-      'POST',
-      upload(1, 'evidence'),
-      201,
-    )
-    const r = await record(id, pid)
-    await submit(
-      id,
-      {
-        data: {
-          ...r.data,
-          fields: {
-            summary: '代工件按客户确认检验交付，不进行整机客户试用。',
-            waiverReason: '合同范围为零部件代工',
-            customerConfirmation: '客户确认函 TEST-01',
-          },
-        },
-      },
-      pid,
-    )
-    assert.equal((await record(id, pid)).result, 'not_applicable')
-    const fail = await save('test', 'draft', 'fail', pid)
+      id = await save('design', 'record', '', pid),
+      r = await record(id, pid)
     await f.db.execute(
-      sql`create function fail_lifecycle_audit() returns trigger as $$ begin if NEW.action in ('FILE_UPLOADED','LIFECYCLE_SUBMITTED') then raise exception 'isolated lifecycle audit failure'; end if; return NEW; end; $$ language plpgsql`,
+      sql`create function fail_lifecycle_audit() returns trigger as $$ begin if NEW.action in ('FILE_UPLOADED','LIFECYCLE_SAVED') then raise exception 'isolated audit failure'; end if; return NEW; end; $$ language plpgsql`,
     )
     await f.db.execute(
       sql`create trigger lifecycle_audit_failure before insert on npi_events for each row execute function fail_lifecycle_audit()`,
     )
-    await f.call(
-      'technical',
-      `/files/lifecycle/${fail}`,
-      'POST',
-      upload(1),
-      500,
-    )
-    assert.equal((await record(fail, pid)).version, 1)
-    assert.equal(
-      (await f.call('technical', `/files/lifecycle/${fail}`)).files.length,
-      0,
-    )
-    await f.db.execute(sql`drop trigger lifecycle_audit_failure on npi_events`)
-    await f.call(
-      'technical',
-      `/files/lifecycle/${fail}`,
-      'POST',
-      upload(1, 'report', 'fail'),
-      201,
-    )
-    await photo(fail, pid)
-    await f.db.execute(
-      sql`create trigger lifecycle_audit_failure before insert on npi_events for each row execute function fail_lifecycle_audit()`,
-    )
-    await submit(fail, {}, pid, 500)
-    assert.equal((await record(fail, pid)).status, 'draft')
-    assert.equal(
-      (await f.call('technical', `/projects/${pid}/issues`)).length,
-      0,
-    )
-    await f.db.execute(sql`drop trigger lifecycle_audit_failure on npi_events`)
-    await f.db.execute(sql`drop function fail_lifecycle_audit()`)
-    const invalid = await record(fail, pid)
-    await submit(
-      fail,
-      {
-        result: 'pass',
-        data: {
-          ...invalid.data,
-          measurements: [{ ...invalid.data.measurements[0], verdict: 'fail' }],
+    try {
+      await f.call(
+        'technical',
+        `/projects/${pid}/lifecycle/${id}`,
+        'PUT',
+        {
+          ...r,
+          title: '不会保存',
+          expectedVersion: r.version,
+          action: 'record',
         },
-      },
-      pid,
-      422,
-    )
+        500,
+      )
+      await f.call(
+        'technical',
+        `/files/lifecycle/${id}`,
+        'POST',
+        photoForm(r.version),
+        500,
+      )
+      assert.equal((await record(id, pid)).version, r.version)
+      assert.equal(
+        (await f.call('technical', `/files/lifecycle/${id}`)).files.length,
+        0,
+      )
+    } finally {
+      await f.db.execute(
+        sql`drop trigger lifecycle_audit_failure on npi_events`,
+      )
+      await f.db.execute(sql`drop function fail_lifecycle_audit()`)
+    }
   })
   await test('handover and trash re-evaluate record and file access; inheritance never copies lifecycle results', async () => {
     const pid = await f.project(),
@@ -567,174 +585,6 @@ try {
     const denied = await app.request(url)
     assert.equal(denied.status, 401)
   })
-  const probe = createServer()
-  await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r))
-  const address = probe.address()
-  assert(address && typeof address !== 'string')
-  const port = address.port
-  await new Promise<void>((r) => probe.close(() => r()))
-  const root = `http://localhost:${port}`
-  mkdirSync('runtime/test-evidence', { recursive: true })
-  log = openSync('runtime/lifecycle-server.log', 'w')
-  server = spawn(process.execPath, ['dist/server.mjs'], {
-    env: { ...process.env, PORT: String(port), BASE_URL: root },
-    stdio: ['ignore', log, log],
-  })
-  for (let i = 0; i < 60; i++) {
-    try {
-      if ((await fetch(root + '/api/health')).ok) break
-    } catch {}
-    await delay(200)
-  }
-  browser = await chromium.launch(process.env.CI ? {} : { channel: 'chrome' })
-  await test('browser: six project tabs, owner-only onsite test entry, report analysis, immutable review and mobile layout', async () => {
-    const pid = await f.project(),
-      context = await browser!.newContext({
-        viewport: { width: 1440, height: 960 },
-      })
-    await context.addCookies([
-      { name: 'session', value: f.actors.technical!.token, url: root },
-    ])
-    const p = await context.newPage(),
-      errors: string[] = []
-    p.on('pageerror', (e) => errors.push(e.message))
-    await p.goto(`${root}/npi?view=projects&project=${pid}&tab=overview`)
-    await expect(p.getByRole('tablist').first().getByRole('tab')).toHaveCount(6)
-    await expect(
-      p
-        .getByRole('navigation', { name: '主导航' })
-        .getByRole('button', { name: 'BOM管理', exact: true }),
-    ).toHaveCount(0)
-    await expect(
-      p
-        .getByRole('navigation', { name: '主导航' })
-        .getByRole('button', { name: '报表看板', exact: true }),
-    ).toHaveCount(0)
-    await p.screenshot({
-      path: 'runtime/test-evidence/lifecycle-project-desktop.png',
-      fullPage: true,
-    })
-    await p.getByRole('button', { name: '新增记录', exact: true }).click()
-    const d = p.getByRole('dialog')
-    await d.getByLabel('记录类型', { exact: true }).selectOption('test')
-    await d.getByLabel('记录标题', { exact: true }).fill('现场温升试验 01')
-    await d.getByLabel('计划日期', { exact: true }).fill(today())
-    await d.getByLabel('实际记录日期', { exact: true }).fill(today())
-    const payload = lifecyclePayload('test')
-    for (const field of lifecycleDefinitions.test.fields)
-      await d
-        .getByLabel(field.label, { exact: true })
-        .fill(payload.data.fields[field.key]!)
-    await d.getByRole('button', { name: '添加测项', exact: true }).click()
-    for (const [label, value] of [
-      ['测项名称1', '绕组温升'],
-      ['测项要求1', '按技术协议判定'],
-      ['实测结果1', '65'],
-      ['测项单位1', 'K'],
-    ])
-      await d.getByLabel(label!, { exact: true }).fill(value!)
-    await d.getByLabel('测项判定1', { exact: true }).selectOption('pass')
-    await d.getByLabel('结论', { exact: true }).selectOption('pass')
-    await d
-      .getByLabel('分析与最终结论说明', { exact: true })
-      .fill(
-        '供电、负载和环境符合已确认方案，温升满足协议指标，同意进入后续验证。',
-      )
-    // Simulate a lost response after the server committed the first save.
-    await p.route(
-      `**/api/v1/npi/projects/${pid}/lifecycle/*`,
-      async (route) => {
-        await route.fetch()
-        await route.abort('failed')
-      },
-      { times: 1 },
-    )
-    await d.getByRole('button', { name: '保存草稿', exact: true }).click()
-    await expect(
-      d.getByRole('button', { name: '核对服务器记录', exact: true }),
-    ).toBeVisible()
-    p.once('dialog', (dialog) => dialog.accept())
-    await d.getByRole('button', { name: '核对服务器记录', exact: true }).click()
-    assert.equal((await life(pid)).records.length, 1)
-
-    await expect(d.getByLabel('选择文件或照片', { exact: true })).toBeVisible()
-    await d
-      .getByLabel('报告分析', { exact: true })
-      .fill(
-        '对照试验曲线和现场条件核查，65K 的实测温升满足协议限值，未发现需降额的偏差。',
-      )
-    await d.getByLabel('报告结论', { exact: true }).selectOption('pass')
-    await d.getByLabel('选择文件或照片', { exact: true }).setInputFiles({
-      name: '现场报告.pdf',
-      mimeType: 'application/pdf',
-      buffer: processPdf,
-    })
-    await d.getByRole('button', { name: '上传资料', exact: true }).click()
-    await expect(
-      d.getByRole('button', { name: '上传资料', exact: true }),
-    ).toBeEnabled()
-    await expect(d.getByText('现场报告.pdf', { exact: true })).toBeVisible()
-    await p.screenshot({
-      path: 'runtime/test-evidence/lifecycle-report-analysis.png',
-    })
-    await d.getByLabel('相册多选', { exact: true }).setInputFiles({
-      name: '现场照片.png',
-      mimeType: 'image/png',
-      buffer: processPhoto,
-    })
-    await d.getByRole('button', { name: '上传照片（1）', exact: true }).click()
-    await expect(
-      d.getByText('本批 1 张照片已全部上传，可在下方查看。', { exact: true }),
-    ).toBeVisible()
-    await expect(
-      d.getByRole('button', { name: '提交结论', exact: true }),
-    ).toBeEnabled()
-    await d.getByRole('button', { name: '提交结论', exact: true }).click()
-    await expect(d).toHaveCount(0)
-    await p
-      .getByRole('button', {
-        name: '查看流程记录 现场温升试验 01',
-        exact: true,
-      })
-      .click()
-    await expect(
-      d.getByRole('button', { name: '提交结论', exact: true }),
-    ).toHaveCount(0)
-    await expect(d.getByLabel('现场地点', { exact: true })).toBeDisabled()
-    await d.getByRole('button', { name: '关闭', exact: true }).click()
-    await p.setViewportSize({ width: 390, height: 844 })
-    assert(
-      await p.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth + 1,
-      ),
-    )
-    await p.screenshot({
-      path: 'runtime/test-evidence/lifecycle-project-mobile.png',
-      fullPage: true,
-    })
-    await p.getByRole('tab', { name: '资料与记录', exact: true }).click()
-    await p.getByRole('button', { name: '承诺与动态', exact: true }).click()
-    await p.reload()
-    await expect(
-      p.getByRole('tab', { name: '资料与记录', exact: true }),
-    ).toHaveAttribute('data-state', 'active')
-    assert.deepEqual(errors, [])
-    await context.close()
-    const supervisor = await browser!.newContext()
-    await supervisor.addCookies([
-      { name: 'session', value: f.actors.supervisor!.token, url: root },
-    ])
-    const view = await supervisor.newPage()
-    await view.goto(`${root}/npi?view=projects&project=${pid}&tab=overview`)
-    await expect(
-      view.getByRole('button', { name: '新增记录', exact: true }),
-    ).toHaveCount(0)
-    await expect(view.getByRole('button', { name: /推进阶段/ })).toHaveCount(0)
-    await supervisor.close()
-  })
 } finally {
-  await browser?.close()
-  server?.kill('SIGTERM')
-  if (log !== undefined) closeSync(log)
   await f.closeDatabase()
 }

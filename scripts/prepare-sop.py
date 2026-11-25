@@ -17,15 +17,16 @@ from PIL import Image
 parser = argparse.ArgumentParser()
 parser.add_argument('--soffice', default='soffice')
 parser.add_argument('--pdftoppm', default='pdftoppm')
-parser.add_argument('--only', choices=['design','production','procurement','quality'])
+parser.add_argument('--only', choices=['design','production','procurement','quality','stages'])
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent / 'docs' / 'sop'
 ns = {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
       'p': 'http://schemas.openxmlformats.org/presentationml/2006/main'}
 definitions = [
-    ('design', '设计部', 'technical', '建项与 BOM、阶段照片、试验分析、客户反馈和结项。'),
+    ('design', '设计部', 'technical', '建项与 BOM、阶段推进、简要记录、客户反馈和结项。'),
     ('production', '生产部', 'manufacturing', '接收项目、转采购、批量回复零件及整机完成时间。'),
     ('procurement', '采购部', 'procurement', '核对采购件、批量回复交期、确认到货和补充凭证。'),
+    ('stages', '项目负责人', 'technical', '顺序推进阶段、简要记录、可选附件及结项业务检查。'),
     ('quality', '质量部', 'quality', '来料与过程检验、样机报告分析、现场照片及异常处置。'),
 ]
 previous = {x['id']:x for x in json.loads((root / 'catalog.json').read_text())}
@@ -34,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='hd-sop-render-') as temp:
     tmp = Path(temp)
     for key, department, role, description in definitions:
         if args.only and key != args.only:
-            catalog.append(previous[key])
+            if key in previous: catalog.append(previous[key])
             continue
         source = root / f'{key}.pptx'
         subprocess.run([args.soffice, f'-env:UserInstallation={tmp.as_uri()}/lo',
@@ -65,10 +66,10 @@ with tempfile.TemporaryDirectory(prefix='hd-sop-render-') as temp:
                 pages.append({'title': title, 'text': '\n'.join(text)})
         files = [root / f'{key}.pptx', root / f'{key}.pdf',
                  *[root / key / f'{i}.webp' for i in range(1, len(pages) + 1)]]
-        catalog.append({'id': key, 'title': f'{department}软件操作 SOP',
+        catalog.append({'id': key, 'title': '项目阶段推进操作 SOP' if key == 'stages' else f'{department}软件操作 SOP',
                         'department': department, 'role': role,
                         'description': description, 'edition': '2026.11',
-                        'appliesTo': 'HD-PLM 4.3.0' if key == 'quality' else 'HD-PLM 4.2.1', 'pages': pages,
+                        'appliesTo': 'HD-PLM 4.4.0' if key in ('stages', 'design', 'quality') else 'HD-PLM 4.2.1', 'pages': pages,
                         'assets': {str(p.relative_to(root)): {
                             'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
                             'size': p.stat().st_size} for p in files}})

@@ -119,6 +119,18 @@ const payload = (
 const savedItems = async () =>
   (await call('technical', `/projects/${projectId}`)).items as any[]
 async function setup() {
+  for (const [role, peer, name] of [
+    ['manufacturing', 'sharedMfg', '生产一组'],
+    ['procurement', 'sharedBuyer', '采购一组'],
+  ])
+    await call('admin', '/departments', 'POST', {
+      name,
+      role,
+      memberIds: [actors[role!]!.id, actors[peer!]!.id],
+      expectedVersion: 0,
+      reason: '验证同组部件回复',
+    })
+
   projectId = (
     await call(
       'technical',
@@ -136,17 +148,6 @@ async function setup() {
       201,
     )
   ).id
-  for (const [role, peer, name] of [
-    ['manufacturing', 'sharedMfg', '生产一组'],
-    ['procurement', 'sharedBuyer', '采购一组'],
-  ])
-    await call('admin', '/departments', 'POST', {
-      name,
-      role,
-      memberIds: [actors[role!]!.id, actors[peer!]!.id],
-      expectedVersion: 0,
-      reason: '验证同组部件回复',
-    })
   const workbook = new ExcelJS.Workbook(),
     sheet = workbook.addWorksheet('母件结构表-多阶')
   sheet.getCell('A4').value = 'MOTOR-001'

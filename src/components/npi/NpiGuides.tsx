@@ -123,7 +123,7 @@ export function NpiGuides({ api, role }: { api: Api; role: string }) {
   )
 
   return (
-    <section className="npi-guides" aria-label="流程文件与部门操作 SOP">
+    <section className="npi-guides" aria-label="流程文件与操作 SOP">
       {error && (
         <div role="alert" className="npi-message error">
           {error}
@@ -157,9 +157,7 @@ export function NpiGuides({ api, role }: { api: Api; role: string }) {
             <div>
               <span className="npi-guide-kicker">统一流程要求</span>
               <h2>设计部新品跟踪管理程序</h2>
-              <p>
-                职责、阶段要求、照片与报告要求；各部门操作请配合下方 SOP 使用。
-              </p>
+              <p>职责、阶段推进与记录规则；具体操作请配合下方 SOP 使用。</p>
             </div>
             <button
               className="npi-button secondary"
@@ -173,7 +171,7 @@ export function NpiGuides({ api, role }: { api: Api; role: string }) {
             </button>
           </article>
           <div className="npi-guide-section-title">
-            <h2>部门操作 SOP</h2>
+            <h2>操作 SOP</h2>
             <p>在线查看图文步骤，或下载课件培训使用。</p>
           </div>
           <div className="npi-guide-grid">

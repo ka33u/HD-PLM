@@ -3,6 +3,10 @@ import { NpiMotorOrderFields } from './NpiMotorTypes'
 import { useEffect, useState } from 'react'
 import { profileFields } from '../../lib/npi/project-profile'
 import {
+  isManufacturingOwner,
+  manufacturingOwnerHint,
+} from '../../lib/npi/manufacturing-owner'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -84,6 +88,11 @@ export function NpiProjectChange({
   }
   const fieldValue = (key: string, fallback: string) =>
     typeof proposal[key] === 'string' ? proposal[key] : fallback
+  const manufacturingChoices = meta.users.filter(isManufacturingOwner)
+  const invalidManufacturingOwner = !manufacturingChoices.some(
+    (u) =>
+      u.id === fieldValue('manufacturingOwnerId', project.manufacturingOwnerId),
+  )
   return (
     <>
       <button
@@ -177,8 +186,22 @@ export function NpiProjectChange({
                     )}
                   </label>
                 ))}
-                <details className="wide">
+                <details
+                  className="wide"
+                  open={invalidManufacturingOwner || undefined}
+                >
                   <summary>计划日期与负责人</summary>
+                  <p>{manufacturingOwnerHint}</p>
+                  {invalidManufacturingOwner && (
+                    <p className="npi-error" role="status">
+                      原制造负责人不符合当前要求，请重新选择；历史记录保留。
+                    </p>
+                  )}
+                  {!manufacturingChoices.length && (
+                    <p>
+                      当前无可选人员，请先在账号与部门中开通并分配制造类部门。
+                    </p>
+                  )}
                   <div className="npi-form-grid">
                     <label>
                       要求齐套日期
@@ -207,8 +230,14 @@ export function NpiProjectChange({
                     {(['technical', 'manufacturing'] as const).map((role) => {
                       const key = `${role}OwnerId` as const
                       const selected = fieldValue(key, project[key])
-                      const options = meta.users.filter(
-                        (u) => u.role === role || u.id === selected,
+                      const options =
+                        role === 'manufacturing'
+                          ? manufacturingChoices
+                          : meta.users.filter(
+                              (u) => u.role === role || u.id === selected,
+                            )
+                      const selectedAvailable = options.some(
+                        (u) => u.id === selected,
                       )
                       return (
                         <label key={role}>
@@ -218,17 +247,18 @@ export function NpiProjectChange({
                             aria-label={
                               role === 'technical' ? '技术负责人' : '制造负责人'
                             }
-                            defaultValue={selected}
+                            defaultValue={selectedAvailable ? selected : ''}
                             required
                           >
-                            {!options.some((u) => u.id === selected) && (
-                              <option value={selected}>
-                                原负责人已停用，请选择接任者
+                            {!selectedAvailable && (
+                              <option value="" disabled>
+                                请选择符合要求的负责人
                               </option>
                             )}
                             {options.map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.name || u.email} · {u.email}
+                                {u.name || u.email} ·{' '}
+                                {u.departmentName || u.email}
                               </option>
                             ))}
                           </select>

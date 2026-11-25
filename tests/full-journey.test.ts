@@ -133,102 +133,17 @@ async function record(
   await page.getByRole('tab', { name: '项目流程', exact: true }).click()
   await page.getByRole('button', { name: '新增记录', exact: true }).click()
   const d = page.getByRole('dialog')
-  await d.getByLabel('记录类型', { exact: true }).selectOption(kind)
+  await d.getByLabel('所属阶段', { exact: true }).selectOption(kind)
   await d.getByLabel('记录标题', { exact: true }).fill(title)
-  await d.getByLabel('计划日期', { exact: true }).fill(day)
-  await d.getByLabel('实际记录日期', { exact: true }).fill(day)
-  const payload = lifecyclePayload(kind, result)
-  if (kind === 'test')
-    Object.assign(payload.data.fields, {
-      sampleId: '模拟样机 HD-J-001 / 图纸 V1 / BOM V1',
-      basis: '模拟技术协议：绕组温升不超过80K，额定负载持续2小时',
-      location: '模拟试验台01',
-      witnesses: '模拟设计负责人、模拟试验记录员',
-      environment: '25℃、相对湿度60%、卧式安装、风冷',
-      powerLoad: '380V / 50Hz / 额定负载 / 持续2小时',
-      instruments: '模拟测温仪T01，校准记录TEST-01有效',
-      observations:
-        result === 'fail'
-          ? '温升85K，超过约定限值；停止试验并检查冷却通道。'
-          : '整改后温升65K，连续运行平稳，无异常噪声。',
-    })
-  if (kind === 'trial')
-    Object.assign(payload.data.fields, {
-      customerContact: '模拟客户A / 联系人张工',
-      sampleId: 'HD-J-001 / BOM V1',
-      conditions: '380V、额定负载、累计运行48小时',
-      feedback: '模拟客户确认运行正常，验收依据 TEST-CUSTOMER-01',
-    })
-  for (const field of lifecycleDefinitions[kind].fields)
-    await d
-      .getByLabel(field.label, { exact: true })
-      .fill(payload.data.fields[field.key]!)
-  if (kind === 'test') {
-    await d.getByRole('button', { name: '添加测项', exact: true }).click()
-    for (const [label, value] of [
-      ['测项名称1', '绕组温升'],
-      ['测项要求1', '≤80'],
-      ['实测结果1', result === 'fail' ? '85' : '65'],
-      ['测项单位1', 'K'],
-    ])
-      await d.getByLabel(label!, { exact: true }).fill(value!)
-    await d.getByLabel('测项判定1', { exact: true }).selectOption(result)
-  }
-  await d.getByLabel('结论', { exact: true }).selectOption(result)
+  await d.getByLabel('记录日期', { exact: true }).fill(day)
   await d
-    .getByLabel('分析与最终结论说明', { exact: true })
+    .getByLabel('记录内容', { exact: true })
     .fill(
       result === 'fail'
-        ? '模拟验证：温升超过约定限值，应整改冷却通道后复测。'
-        : '模拟验证：逐项核对记录和实测依据，满足本阶段要求。',
+        ? '温升85K，超过约定限值；需检查冷却通道并复测。'
+        : '现场情况已核对，继续按实际进展跟进。',
     )
-  if (result === 'fail') {
-    await d
-      .getByLabel('后续措施', { exact: true })
-      .fill('检查冷却通道并重新试验，原报告保留。')
-    await d.getByLabel('下次跟进日期', { exact: true }).fill(due)
-  }
-  await d.getByRole('button', { name: '保存并添加照片', exact: true }).click()
-  const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    d.getByRole('button', { name: '相册多选', exact: true }).click(),
-  ])
-  await chooser.setFiles({
-    name: kind + '-模拟现场.png',
-    mimeType: 'image/png',
-    buffer: processPhoto,
-  })
-  await d.getByRole('button', { name: '上传照片（1）', exact: true }).click()
-  await expect(
-    d.getByText('本批 1 张照片已全部上传，可在下方查看。', { exact: true }),
-  ).toBeVisible()
-  if (kind === 'test' || kind === 'trial') {
-    if (!(await d.getByLabel('选择文件或照片', { exact: true }).isVisible()))
-      await d.getByText('上传报告或其他文件', { exact: true }).click()
-    await d
-      .getByLabel('文件分类', { exact: true })
-      .selectOption(kind === 'test' ? 'report' : 'evidence')
-    if (kind === 'test') {
-      await d
-        .getByLabel('报告分析', { exact: true })
-        .fill(
-          result === 'fail'
-            ? '实测85K超过80K限值，不能判为通过，整改后复测。'
-            : '整改后同工况实测65K，低于80K限值，原超限报告保持留存。',
-        )
-      await d.getByLabel('报告结论', { exact: true }).selectOption(result)
-    }
-    await d.getByLabel('选择文件或照片', { exact: true }).setInputFiles({
-      name: kind === 'test' ? title + '.pdf' : '模拟客户反馈确认.pdf',
-      mimeType: 'application/pdf',
-      buffer: processPdf,
-    })
-    await d.getByRole('button', { name: '上传资料', exact: true }).click()
-    await expect(
-      d.getByRole('button', { name: '上传资料', exact: true }),
-    ).toBeEnabled()
-  }
-  await d.getByRole('button', { name: '提交结论', exact: true }).click()
+  await d.getByRole('button', { name: '保存记录', exact: true }).click()
   await expect(d).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: '查看流程记录 ' + title, exact: true }),
@@ -243,7 +158,7 @@ async function advance(stage: string, label: string) {
   const d = page.getByRole('dialog')
   if (stage === 'manufacturing')
     await d.getByLabel('图纸实际完成日期', { exact: true }).fill(day)
-  await d.getByRole('button', { name: '保存', exact: true }).click()
+  await d.getByRole('button', { name: '确认推进', exact: true }).click()
   await expect(d).toHaveCount(0)
   assert.equal(
     (await read(page, `/projects/${projectId}`)).currentNpiStage,
@@ -681,9 +596,31 @@ try {
         await advance('test', '样机试验')
       },
     )
-    await step('现场试验不通过，自动建问题、整改复测并闭环', async () => {
+    await step('现场记录独立保存，主动登记问题后整改复测并闭环', async () => {
       const page = pages.technical!
       await record('test', '模拟温升超限初测', 'fail')
+      assert.equal(
+        (await read(page, `/projects/${projectId}/issues`)).length,
+        0,
+      )
+      await expect(
+        page.getByRole('button', { name: '推进阶段 · 客户试用', exact: true }),
+      ).toBeEnabled()
+      const response = await page.request.post(
+        root + `/api/v1/npi/projects/${projectId}/issues`,
+        {
+          headers: { origin: root, 'x-npi-actor': people.technical!.id },
+          data: {
+            title: '模拟温升超限整改',
+            description: '依据现场记录，清理冷却通道并复测。',
+            severity: 'High',
+            ownerId: people.technical!.id,
+            targetDate: due,
+          },
+        },
+      )
+      assert.equal(response.status(), 201, await response.text())
+      await page.reload()
       let issues = await read(page, `/projects/${projectId}/issues`)
       assert.equal(issues.length, 1)
       assert.equal(issues[0].state, 'Open')
@@ -718,18 +655,19 @@ try {
       const records = (await read(page, `/projects/${projectId}/lifecycle`))
         .records
       assert.equal(
-        records.filter(
-          (r: any) => r.kind === 'test' && r.status === 'submitted',
-        ).length,
+        records.filter((r: any) => r.kind === 'test' && r.status === 'recorded')
+          .length,
         2,
       )
       assert(
         records.some(
-          (r: any) => r.title === '模拟温升超限初测' && r.result === 'fail',
+          (r: any) =>
+            r.title === '模拟温升超限初测' &&
+            r.data.fields.summary.includes('温升85K'),
         ),
       )
     })
-    await step('手机记录客户试用反馈、上传依据并定型结项', async () => {
+    await step('手机简要记录客户试用反馈并定型结项', async () => {
       const page = pages.technical!
       await page.setViewportSize({ width: 390, height: 844 })
       await record('trial', '模拟客户连续运行反馈')
@@ -739,7 +677,7 @@ try {
       const records = (await read(page, `/projects/${projectId}/lifecycle`))
         .records
       assert.equal(records.length, 7)
-      assert(records.every((r: any) => r.status === 'submitted'))
+      assert(records.every((r: any) => r.status === 'recorded'))
       assert.equal(final.currentNpiStage, 'completed')
       await expect(page.locator('.npi-process-notice')).toHaveCount(0)
       assert.equal(final.untrackedBomCount, 0)

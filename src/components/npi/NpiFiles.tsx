@@ -249,61 +249,70 @@ export function NpiFiles({
                   placeholder="可选，默认使用文件名"
                 />
               </label>
-              <label>
-                文件分类
-                <select
-                  name="category"
-                  aria-label="文件分类"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  {['lifecycle', 'quality'].includes(scope.kind) ? (
-                    <>
-                      <option value="report">报告及分析</option>
-                      <option value="evidence">现场照片 / 客户反馈依据</option>
-                    </>
-                  ) : scope.kind === 'issue' ? (
-                    <option value="issue">问题照片 / 说明资料</option>
-                  ) : (
-                    <>
-                      {!buyer && <option value="technical">技术资料</option>}
-                      {scope.kind === 'tracking' && (
-                        <option value="receipt">到货照片 / 资料</option>
+              {scope.kind === 'lifecycle' ? (
+                <input type="hidden" name="category" value="evidence" />
+              ) : (
+                <>
+                  <label>
+                    文件分类
+                    <select
+                      name="category"
+                      aria-label="文件分类"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      {['lifecycle', 'quality'].includes(scope.kind) ? (
+                        <>
+                          <option value="report">报告及分析</option>
+                          <option value="evidence">
+                            现场照片 / 客户反馈依据
+                          </option>
+                        </>
+                      ) : scope.kind === 'issue' ? (
+                        <option value="issue">问题照片 / 说明资料</option>
+                      ) : (
+                        <>
+                          {!buyer && (
+                            <option value="technical">技术资料</option>
+                          )}
+                          {scope.kind === 'tracking' && (
+                            <option value="receipt">到货照片 / 资料</option>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                </select>
-              </label>
-              {['lifecycle', 'quality'].includes(scope.kind) &&
-                category === 'report' && (
-                  <>
-                    <label>
-                      报告分析
-                      <textarea
-                        name="analysis"
-                        aria-label="报告分析"
-                        maxLength={8000}
-                        rows={3}
-                        required
-                        placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
-                      />
-                    </label>
-                    <label>
-                      报告结论
-                      <select
-                        name="conclusion"
-                        aria-label="报告结论"
-                        defaultValue=""
-                        required
-                      >
-                        <option value="">请选择</option>
-                        <option value="pass">通过</option>
-                        <option value="fail">不通过</option>
-                        <option value="continue">需要补充验证</option>
-                      </select>
-                    </label>
-                  </>
-                )}
+                    </select>
+                  </label>
+                </>
+              )}
+              {scope.kind === 'quality' && category === 'report' && (
+                <>
+                  <label>
+                    报告分析
+                    <textarea
+                      name="analysis"
+                      aria-label="报告分析"
+                      maxLength={8000}
+                      rows={3}
+                      required
+                      placeholder="对照判定依据，说明结果、差异、原因、影响和后续措施，不能只写见报告。"
+                    />
+                  </label>
+                  <label>
+                    报告结论
+                    <select
+                      name="conclusion"
+                      aria-label="报告结论"
+                      defaultValue=""
+                      required
+                    >
+                      <option value="">请选择</option>
+                      <option value="pass">通过</option>
+                      <option value="fail">不通过</option>
+                      <option value="continue">需要补充验证</option>
+                    </select>
+                  </label>
+                </>
+              )}
               <label>
                 选择文件或照片
                 <input

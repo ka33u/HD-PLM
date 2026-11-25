@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Issue #1: real API and browser against a fresh _test database.
 import 'dotenv/config'
@@ -9,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { chromium, expect } from '@playwright/test'
 import ExcelJS from 'exceljs'
 import { freshTestDatabase } from './helpers/fresh-database'
@@ -58,6 +59,7 @@ for (const role of [
   })
   actors[role] = { id: u!.id, token: (await createSession(u!.id)).sessionToken }
 }
+await manufacturingTestDepartments(db, [actors.manufacturing!.id])
 async function call(
   role: string,
   path: string,
@@ -503,6 +505,7 @@ try {
       422,
     )
     const department = await call('admin', '/departments', 'POST', body)
+    await db.execute(sql`update npi_user_roles set department_id=null where user_id=${actors.manufacturing!.id}`)
     const manufacturing = await call('admin', '/departments', 'POST', {
       ...body,
       name: '制造一组',

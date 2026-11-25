@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { randomUUID } from 'node:crypto'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db'
 import * as s from '../db/schema/npi'
@@ -13,7 +12,6 @@ import {
   versionCheck,
 } from './service'
 import {
-  lifecycleDefinitions,
   lifecycleKinds,
   parseLifecycleData,
   resultLabels,
@@ -31,7 +29,7 @@ export function requireLifecycleOwner(actor: Actor, p: Project) {
   )
     throw new NpiError(
       'NPI_PERMISSION_DENIED',
-      '流程记录与阶段结论由本项目负责人填写，主管和其他成员可查看',
+      '阶段推进与过程记录由本项目负责人操作，主管和其他成员可查看',
       403,
     )
 }
@@ -48,30 +46,8 @@ export async function lifecycleRows(run: Run, projectId: string) {
 export async function lifecycleGate(run: Run, p: Project) {
   const next = stages[stages.indexOf(p.currentNpiStage) + 1] || null
   if (!next) return { next, blockers: [] as string[] }
-  const records = await lifecycleRows(run, p.programId)
-  const required = lifecycleKinds.slice(
-    0,
-    next === 'completed' ? 6 : stages.indexOf(next),
-  )
+  // Keep delivery and issue checks independent of optional process records.
   const blockers: string[] = []
-  for (const kind of required) {
-    const active = records.filter(
-      (r) => r.kind === kind && r.status !== 'cancelled',
-    )
-    const latest = active[0]
-    if (
-      !latest ||
-      latest.status !== 'submitted' ||
-      !['pass', ...(kind === 'trial' ? ['not_applicable'] : [])].includes(
-        latest.result,
-      )
-    )
-      blockers.push(`${lifecycleDefinitions[kind].label}尚无最新有效通过结论`)
-    if (active.some((r) => r.status === 'draft'))
-      blockers.push(
-        `${lifecycleDefinitions[kind].label}有未提交记录，请完成或说明原因后取消`,
-      )
-  }
   if (['trial', 'completed'].includes(next)) {
     const issues = await run
       .select()
@@ -191,14 +167,14 @@ export async function saveLifecycle(
     if (old && old.programId !== projectId)
       throw new NpiError('VERSION_CONFLICT', '记录归属不一致', 409)
     versionCheck(old?.version || 0, input.expectedVersion)
-    if (old && old.status !== 'draft')
+    if (old && !['draft', 'recorded'].includes(old.status))
       throw new NpiError(
         'INVALID_STATE_TRANSITION',
         '已提交或已取消记录保留原文，请新增复核或复测记录',
         409,
       )
     const action = input.action || 'draft'
-    if (!['draft', 'submit', 'cancel'].includes(String(action)))
+    if (!['record', 'draft', 'submit', 'cancel'].includes(String(action)))
       throw new NpiError('VALIDATION_ERROR', '记录操作无效')
     if (action === 'cancel') {
       if (!old) throw new NpiError('VALIDATION_ERROR', '请先保存记录')
@@ -225,7 +201,9 @@ export async function saveLifecycle(
           'VALIDATION_ERROR',
           '记录类型无效或已改变，请另建记录',
         )
-      const result = String(input.result || '') as LifecycleResult
+      const result = String(
+        action === 'record' ? old?.result || '' : input.result || '',
+      ) as LifecycleResult
       if (
         !Object.hasOwn(resultLabels, result) ||
         (result === 'not_applicable' && kind !== 'trial')
@@ -236,54 +214,36 @@ export async function saveLifecycle(
         title: textValue(input.title, '记录标题', 200),
         plannedDate: dateValue(input.plannedDate, '计划日期', true),
         performedDate: dateValue(input.performedDate, '实际记录日期', true),
-        data: parseLifecycleData(kind, input.data),
+        // Preserve legacy details when a historical draft is simplified.
+        data: parseLifecycleData(
+          kind,
+          action === 'record' && old
+            ? {
+                ...old.data,
+                fields: {
+                  ...old.data.fields,
+                  summary: (input.data as { fields?: Record<string, unknown> })
+                    ?.fields?.summary,
+                },
+              }
+            : input.data,
+        ),
         result,
-        status: (action === 'submit' ? 'submitted' : 'draft') as
-          'submitted' | 'draft',
+        status: (action === 'record'
+          ? 'recorded'
+          : action === 'submit'
+            ? 'submitted'
+            : 'draft') as 'recorded' | 'submitted' | 'draft',
         submittedAt: action === 'submit' ? new Date() : null,
         updatedBy: actor.id,
         updatedAt: new Date(),
         version: (old?.version || 0) + 1,
       }
-      let issueId = old?.issueId || null
-      if (action === 'submit') {
-        const files = await tx
-          .select()
-          .from(s.npiAttachments)
-          .where(
-            and(
-              eq(s.npiAttachments.lifecycleRecordId, id),
-              eq(s.npiAttachments.programId, projectId),
-            ),
-          )
-        const errors = submissionErrors(values, files)
+      const issueId = old?.issueId || null
+      if (action === 'submit' || action === 'record') {
+        const errors = submissionErrors(values, [])
         if (errors.length)
-          throw new NpiError('LIFECYCLE_INCOMPLETE', errors.join('；'), 422)
-        if (['fail', 'continue'].includes(result)) {
-          const [issue] = await tx
-            .insert(s.npiIssues)
-            .values({
-              programId: projectId,
-              number: 'ISS-' + randomUUID(),
-              title:
-                `${lifecycleDefinitions[kind].label} · ${values.title}`.slice(
-                  0,
-                  200,
-                ),
-              description: `${values.data.fields.summary}\n后续措施：${values.data.fields.nextAction}\n来源流程记录：${id}`,
-              severity: result === 'fail' ? 'High' : 'Medium',
-              ownerId: p.technicalOwnerId,
-              createdBy: actor.id,
-              targetDate: values.data.fields.followUpDate!,
-            })
-            .returning()
-          issueId = issue!.id
-          await event(tx, actor, projectId, issueId, 'ISSUE_CREATED', {
-            title: issue!.title,
-            lifecycleRecordId: id,
-            targetDate: issue!.targetDate,
-          })
-        }
+          throw new NpiError('VALIDATION_ERROR', errors.join('；'), 422)
       }
       if (old)
         await tx

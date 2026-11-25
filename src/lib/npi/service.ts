@@ -8,6 +8,10 @@ import { listMotorTypes, validateMotorType } from './motor-types'
 import { ensureBomDeliveryTasks } from './delivery-tasks'
 import { carryUnchangedTracking } from './bom-carry'
 import { ownsWork } from './work-ownership'
+import {
+  isManufacturingOwner,
+  manufacturingOwnerHint,
+} from './manufacturing-owner'
 import { createHash } from 'node:crypto'
 import {
   and,
@@ -66,6 +70,7 @@ export type Actor = {
   role: Role
   departmentId?: string | null
   departmentName?: string | null
+  departmentRole?: string | null
   collaboratorIds?: string[]
 }
 type Project = typeof s.npiProjects.$inferSelect
@@ -160,6 +165,7 @@ export async function getActor(
     role,
     departmentId: department?.id || null,
     departmentName: department?.name || null,
+    departmentRole: department?.role || null,
     collaboratorIds: peers.map((p) => p.id),
   }
 }
@@ -197,6 +203,12 @@ export async function owner(tx: Tx, id: unknown, accepted: Array<Role>) {
     throw new NpiError('VALIDATION_ERROR', '责任人岗位不符合要求')
   return a
 }
+export async function manufacturingOwner(tx: Tx, id: unknown) {
+  const person = await getActor(uuidValue(id), tx, true)
+  if (!isManufacturingOwner(person))
+    throw new NpiError('VALIDATION_ERROR', manufacturingOwnerHint)
+  return person
+}
 export async function metadata(userId: string) {
   const actor = await getActor(userId)
   if (['procurement', 'quality'].includes(actor.role))
@@ -216,6 +228,7 @@ export async function metadata(userId: string) {
       role: s.npiUserRoles.role,
       departmentId: s.npiUserRoles.departmentId,
       departmentName: s.npiDepartments.name,
+      departmentRole: s.npiDepartments.role,
     })
     .from(users)
     .leftJoin(s.npiUserRoles, eq(users.id, s.npiUserRoles.userId))
@@ -273,7 +286,7 @@ export async function createProjectInTransaction(
   const actor = await getActor(userId, tx, true)
   if (!['technical', 'admin'].includes(actor.role)) return denied()
   const tech = await owner(tx, input.technicalOwnerId, ['technical'])
-  const mfg = await owner(tx, input.manufacturingOwnerId, ['manufacturing'])
+  const mfg = await manufacturingOwner(tx, input.manufacturingOwnerId)
   const name = textValue(input.motorType ?? input.name, '电机类型', 200),
     model = textValue(input.motorModel, '电机型号', 150)
   const code = input.code

@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 import { seedLifecycleForLegacyTests } from './helpers/lifecycle-fixture'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Real requests against a fresh isolated database; no formal project is touched.
@@ -47,6 +48,7 @@ for (const role of [
   })
   actors[role] = { id: u!.id, token: (await createSession(u!.id)).sessionToken }
 }
+await manufacturingTestDepartments(db, [actors.manufacturing!.id])
 async function call(
   role: string,
   path: string,

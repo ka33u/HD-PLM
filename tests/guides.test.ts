@@ -68,7 +68,7 @@ try {
     )
   })
 
-  await test('all six roles can read all four SOPs and download byte-identical originals', async () => {
+  await test('all six roles can read all five SOPs and download byte-identical originals', async () => {
     for (const role of [
       'admin',
       'supervisor',
@@ -81,7 +81,7 @@ try {
       const catalog = (await f.call(role, '/guides')) as GuideCatalog
       assert.deepEqual(
         catalog.guides.map((x) => x.pages.length),
-        [17, 12, 11, 14],
+        [17, 12, 11, 10, 14],
       )
       assert(!('assets' in catalog.guides[0]!))
       for (const guide of catalog.guides) {
@@ -185,6 +185,7 @@ try {
       ['manufacturing', 'production', '生产部', 12],
       ['procurement', 'procurement', '采购部', 11],
       ['quality', 'quality', '质量部', 14],
+      ['technical', 'stages', '项目负责人', 10],
     ] as const) {
       const context = await browser.newContext({
         viewport: { width: 1440, height: 1000 },
@@ -201,22 +202,21 @@ try {
         .getByRole('navigation', { name: '主导航' })
         .getByRole('button', { name: '流程与 SOP', exact: true })
         .click()
-      await expect(page.locator('.npi-guide-card').first()).toContainText(
-        department,
-      )
+      if (id !== 'stages') await expect(page.locator('.npi-guide-card').first()).toContainText(department)
+      const title = id === 'stages' ? '项目阶段推进操作 SOP' : `${department}软件操作 SOP`
       await page.screenshot({
         path: `runtime/guides-qa/${id}-catalog.png`,
         fullPage: true,
       })
       const card = page.getByRole('article').filter({
-        has: page.getByRole('heading', { name: `${department}软件操作 SOP` }),
+        has: page.getByRole('heading', { name: title }),
       })
       const dl = page.waitForEvent('download')
       await card.getByRole('button', { name: '下载 PPT', exact: true }).click()
       const download = await dl
       assert.equal(
         download.suggestedFilename(),
-        `${department}软件操作SOP.pptx`,
+        `${title.replaceAll(' ', '')}.pptx`,
       )
       const path = await download.path()
       assert(path)
@@ -338,7 +338,7 @@ try {
           .locator('.npi-lifecycle-heading')
           .getByRole('button', { name: '流程与 SOP', exact: true })
           .click()
-        await expect(page.locator('.npi-guide-card')).toHaveCount(4)
+        await expect(page.locator('.npi-guide-card')).toHaveCount(5)
       }
       assert.deepEqual(errors, [])
       await context.close()

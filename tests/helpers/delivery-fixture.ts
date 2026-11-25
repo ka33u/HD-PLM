@@ -156,6 +156,13 @@ export async function deliveryFixture(
       expectedVersion: 0,
       reason: '验证共同办理',
     })
+  await call('admin', '/departments', 'POST', {
+    name: '接任制造组',
+    role: 'manufacturing',
+    memberIds: [actors.nextMfg!.id],
+    expectedVersion: 0,
+    reason: '接任人属于独立制造部门',
+  })
   return {
     db,
     s,

@@ -100,7 +100,7 @@ async function access(
       .where(eq(s.npiLifecycleRecords.id, scope.id))
     if (!r) return missing()
     programId = r.programId
-    active = r.status === 'draft'
+    active = ['draft', 'recorded'].includes(r.status)
   } else if (scope.kind === 'issue') {
     const [r] = await run
       .select()

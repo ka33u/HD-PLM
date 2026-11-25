@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import 'dotenv/config'
 import test from 'node:test'
@@ -47,6 +48,7 @@ for (const role of [
     token: (await createSession(user!.id)).sessionToken,
   }
 }
+await manufacturingTestDepartments(db, [actors.manufacturing!.id])
 async function call(
   role: string,
   path: string,

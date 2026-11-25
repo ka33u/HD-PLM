@@ -35,37 +35,32 @@ test('login preserves internal project targets and rejects external or ambiguous
   ])
     assert.equal(safeReturnTo(value), '/npi')
 })
-test('all six stages require an active evidence image; reports and archived photos cannot substitute', () => {
-  const pdf = {
-    category: 'report',
-    conclusion: 'pass',
-    archivedAt: null,
-    mimeType: 'application/pdf',
-  }
-  const image = {
-    category: 'evidence',
-    conclusion: '',
-    archivedAt: null,
-    mimeType: 'image/jpeg',
-  }
+test('all six stages accept minimal notes with optional attachments and no conclusion', () => {
   for (const kind of lifecycleKinds) {
-    const r = lifecyclePayload(kind)
-    assert(submissionErrors(r, [pdf]).some((e) => e.includes('照片')))
-    assert(
-      submissionErrors(r, [pdf, { ...image, archivedAt: new Date() }]).some(
-        (e) => e.includes('照片'),
-      ),
+    const r = {
+      ...lifecyclePayload(kind),
+      result: '',
+      data: { fields: { summary: '现场进展已核实' }, measurements: [] },
+    }
+    assert.equal(submissionErrors(r, []).length, 0, kind)
+    assert.equal(
+      submissionErrors(r, [
+        {
+          category: 'report',
+          conclusion: 'fail',
+          archivedAt: null,
+          mimeType: 'application/pdf',
+        },
+      ]).length,
+      0,
+      kind,
     )
-    assert(
-      submissionErrors(r, [pdf, { ...image, category: 'report' }]).some((e) =>
-        e.includes('照片'),
-      ),
+    assert.equal(
+      submissionErrors(
+        { ...r, data: { fields: { summary: '' }, measurements: [] } },
+        [],
+      ).length,
+      1,
     )
-    assert.equal(submissionErrors(r, [pdf, image]).length, 0, kind)
   }
-  const trial = lifecyclePayload('trial', 'not_applicable')
-  trial.data.fields.waiverReason = '合同明确不需要试用'
-  trial.data.fields.customerConfirmation = '客户确认记录'
-  assert.equal(submissionErrors(trial, [pdf]).length, 0)
-  assert(submissionErrors(trial, []).some((e) => e.includes('依据')))
 })

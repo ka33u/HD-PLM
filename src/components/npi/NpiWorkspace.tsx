@@ -6,6 +6,10 @@ import {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NpiProjectWorkbench } from './NpiProjectWorkbench'
 import { ownsWork } from '../../lib/npi/work-ownership'
+import {
+  isManufacturingOwner,
+  manufacturingOwnerHint,
+} from '../../lib/npi/manufacturing-owner'
 import { NpiDeliveryList } from './NpiDeliveryList'
 import { NpiGuides } from './NpiGuides'
 import { NpiLifecycle } from './NpiLifecycle'
@@ -156,6 +160,7 @@ type Field = {
   inputMode?: 'text' | 'decimal' | 'numeric'
 }
 type Modal = {
+  submitLabel?: string
   title: string
   help?: string
   path: string
@@ -615,14 +620,25 @@ export function NpiWorkspace() {
     key,
     label,
     type: 'select',
-    options: people(roles),
+    options:
+      key === 'manufacturingOwnerId'
+        ? (meta?.users ?? []).filter(isManufacturingOwner).map((u) => ({
+            value: u.id,
+            label: `${u.name || u.email} · ${u.departmentName}`,
+          }))
+        : people(roles),
     value,
     required: true,
   })
   const showCreate = () =>
     openModal({
       title: '新建新品项目',
-      help: '选择电机类型，填写型号和订单台数。管理员可在“基础数据”添加更多类型。',
+      help:
+        '选择电机类型，填写型号和订单台数。' +
+        manufacturingOwnerHint +
+        ((meta?.users ?? []).some(isManufacturingOwner)
+          ? ''
+          : ' 当前无可选人员，请先在账号与部门中开通并分配制造类部门。'),
       path: '/projects',
       fields: [
         {
@@ -1391,7 +1407,9 @@ export function NpiWorkspace() {
   const advanceProject = () => {
     if (!project) return
     const next = stages[stages.indexOf(project.currentNpiStage) + 1]
+    if (!next) return
     openModal({
+      submitLabel: '确认推进',
       title: `推进至${stageNames[next!]}`,
       help:
         next === 'completed' &&
@@ -1409,8 +1427,8 @@ export function NpiWorkspace() {
               .map((i) => i.name)
               .join('、')}`
           : next === 'completed'
-            ? `结项后项目只读。未关闭问题 ${project.openIssueCount} 项；待复核分配 ${project.untrackedBomCount} 项。全部零部件、工装和整机须完成，请核对资料与验收结果。`
-            : '请确认当前阶段工作已核对，再进入下一阶段。阶段推进会留下操作记录。',
+            ? `结项后项目只读。未关闭问题 ${project.openIssueCount} 项；待复核分配 ${project.untrackedBomCount} 项。规定的零部件、工装和整机须完成，请核对资料与验收结果。`
+            : '请按实际进展确认推进。过程记录及历史结论不影响推进，系统保留本次操作人和时间。',
       path: `/projects/${project.id}/stage`,
       method: 'PATCH',
       fixed: {
@@ -3189,7 +3207,7 @@ export function NpiWorkspace() {
                   取消
                 </button>
                 <button type="submit" className="npi-button" disabled={busy}>
-                  {busy ? '正在保存…' : '保存'}
+                  {busy ? '正在保存…' : modal.submitLabel || '保存'}
                 </button>
               </div>
             </form>

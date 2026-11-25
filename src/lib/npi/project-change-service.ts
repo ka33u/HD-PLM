@@ -7,7 +7,14 @@ import { users } from '../db/schema/users'
 import { projects as projectRecords } from '../db/schema/projects'
 import * as s from '../db/schema/npi'
 import { prepareProjectProfile } from './project-profile'
-import { event, getActor, loadProject, owner, versionCheck } from './service'
+import {
+  event,
+  getActor,
+  loadProject,
+  owner,
+  manufacturingOwner,
+  versionCheck,
+} from './service'
 import { NpiError, dateValue, textValue } from './domain'
 import type { TransactionClient } from '../db'
 
@@ -38,12 +45,11 @@ async function prepare(
       : input.technicalOwnerId,
     ['technical'],
   )
-  const manufacturing = await owner(
+  const manufacturing = await manufacturingOwner(
     tx,
     input.manufacturingOwnerId === undefined
       ? project.manufacturingOwnerId
       : input.manufacturingOwnerId,
-    ['manufacturing'],
   )
   const requiredKitDate = dateValue(
     input.requiredKitDate === undefined

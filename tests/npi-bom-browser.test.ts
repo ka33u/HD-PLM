@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Actual browser + actual API + isolated test database. No production data writes.
 import 'dotenv/config'
@@ -43,6 +44,7 @@ for (const role of [
   const session = await SessionManager.createSession(id)
   accounts[role] = { id, token: session.sessionToken }
 }
+await manufacturingTestDepartments(db, [accounts.manufacturing!.id, accounts.nextMfg!.id])
 const log = fs.openSync('/tmp/npi-bom-browser-server.log', 'w')
 const dev = spawn(process.execPath, ['dist/server.mjs'], {
   detached: true,

@@ -1,3 +1,4 @@
+import { manufacturingTestDepartments } from './helpers/manufacturing-department'
 import 'dotenv/config'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -43,6 +44,7 @@ for (const role of [
   })
   actors[role] = { id, token: (await createSession(id)).sessionToken }
 }
+await manufacturingTestDepartments(db, [actors.manufacturing!.id])
 async function call(
   role: string,
   path: string,

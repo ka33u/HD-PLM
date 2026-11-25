@@ -17,7 +17,7 @@ const slideConfig = {
       "需要跨部门整改时引用原记录建问题"
     ]
   ],
-  "tip": "质量记录不会自动创建阻拦流程的问题；原有阶段结论、交付和问题闭环要求继续有效。",
+  "tip": "质量记录只提醒，不拦截推进；交付、BOM及已建项目问题检查继续有效。",
   "index": 12
 };
 function createSlide(pres,theme){return render(pres,theme,slideConfig)}

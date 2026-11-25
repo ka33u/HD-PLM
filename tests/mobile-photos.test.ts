@@ -37,16 +37,15 @@ let server: ReturnType<typeof spawn> | undefined,
   log: number | undefined,
   browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
 try {
-  await test('API rejects photo-free submission, ignores archived images, and keeps the current owner constraint', async () => {
+  await test('API saves without photos, permits archiving optional images and keeps owner constraints', async () => {
     let r = await life()
-    const blocked = await f.call(
-      'technical',
-      `/projects/${pid}/lifecycle/${id}`,
-      'PUT',
-      { ...r, expectedVersion: r.version, action: 'submit' },
-      422,
-    )
-    assert.match(blocked.error, /照片/)
+    await f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
+      ...r,
+      expectedVersion: r.version,
+      action: 'record',
+    })
+    r = await life()
+    assert.equal(r.status, 'recorded')
     await f.call(
       'manufacturing',
       `/files/lifecycle/${id}`,
@@ -63,18 +62,16 @@ try {
     )
     r = await life()
     await f.call('technical', `/file-archive/${photo.id}`, 'POST', {
-      reason: '测试旧照片被归档后不能满足提交',
+      reason: '可选照片归档仍允许保存记录',
       expectedRecordVersion: r.version,
     })
     r = await life()
-    await f.call(
-      'technical',
-      `/projects/${pid}/lifecycle/${id}`,
-      'PUT',
-      { ...r, expectedVersion: r.version, action: 'submit' },
-      422,
-    )
-    assert.equal((await files()).recordVersion, r.version)
+    await f.call('technical', `/projects/${pid}/lifecycle/${id}`, 'PUT', {
+      ...r,
+      expectedVersion: r.version,
+      action: 'record',
+    })
+    assert.equal((await files()).recordVersion, r.version + 1)
   })
   const probe = createServer()
   await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r))
@@ -105,6 +102,7 @@ try {
   })
   const page = await context.newPage(),
     errors: string[] = []
+  page.setDefaultTimeout(10000)
   page.on('pageerror', (e) => errors.push(e.message))
   await test('mobile login returns to the project and remembers only the opted-in email', async () => {
     await page.goto(root + '/login?redirect=' + encodeURIComponent(target))
@@ -146,7 +144,9 @@ try {
     await page
       .getByRole('button', { name: /查看流程记录 样机确认验证/ })
       .click()
-    await page.getByRole('button', { name: '照片与报告', exact: true }).click()
+    await page
+      .getByRole('button', { name: '照片与附件（选填）', exact: true })
+      .click()
     await expect(page.getByLabel('拍照选择')).toHaveAttribute(
       'capture',
       'environment',
@@ -162,7 +162,7 @@ try {
     ).toBeEnabled()
     await page.getByLabel('照片 1 说明').fill('2026-11-07 样机01 整体')
     await expect(
-      page.getByRole('button', { name: '提交结论', exact: true }),
+      page.getByRole('button', { name: '保存记录', exact: true }),
     ).toBeDisabled()
     let intercepted = false
     await page.route(`**/api/v1/npi/files/lifecycle/${id}`, async (route) => {
@@ -193,7 +193,7 @@ try {
       2,
     )
     await expect(
-      page.getByRole('button', { name: '提交结论', exact: true }),
+      page.getByRole('button', { name: '保存记录', exact: true }),
     ).toBeEnabled()
     await page.screenshot({
       path: 'runtime/test-evidence/mobile-photos-uploaded.png',
@@ -251,7 +251,7 @@ try {
     )
     await page.getByRole('button', { name: '清除预览', exact: true }).click()
   })
-  await test('large camera image is resized, unsupported formats explain the fix, and final submission freezes files', async () => {
+  await test('large camera image is resized, unsupported formats explain the fix, and saved notes remain editable', async () => {
     const png = await page.evaluate(() => {
       const canvas = document.createElement('canvas')
       canvas.width = 4000
@@ -294,9 +294,9 @@ try {
       buffer: Buffer.from('unsupported fixture'),
     })
     await expect(page.getByText(/HEIC 请先转换为 JPG/)).toBeVisible()
-    await page.getByRole('button', { name: '提交结论', exact: true }).click()
+    await page.getByRole('button', { name: '保存记录', exact: true }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    assert.equal((await life()).status, 'submitted')
+    assert.equal((await life()).status, 'recorded')
     await page
       .getByRole('button', { name: /查看流程记录 样机确认验证/ })
       .click()

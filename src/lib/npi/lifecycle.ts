@@ -278,7 +278,8 @@ export const resultLabels: Record<string, string> = {
   '': '待判定',
 }
 export const statusLabels: Record<string, string> = {
-  draft: '草稿',
+  recorded: '已记录',
+  draft: '历史草稿',
   submitted: '已提交',
   cancelled: '已取消',
 }
@@ -354,62 +355,12 @@ export function submissionErrors(
     mimeType?: string
   }>,
 ) {
-  const errors: string[] = [],
-    { fields, measurements } = record.data
-  const active = files.filter((f) => !f.archivedAt)
-  if (!record.performedDate) errors.push('请填写实际记录日期')
-  else if (record.performedDate > today()) errors.push('实际记录日期不能在未来')
-  if (!fields.summary) errors.push('请填写分析与最终结论说明')
-  if (!record.result) errors.push('请选择结论')
-  if (record.result === 'not_applicable') {
-    if (record.kind !== 'trial') errors.push('只有客户试用可以登记不适用')
-    if (!fields.waiverReason || !fields.customerConfirmation)
-      errors.push('不适用须填写适用性说明及客户或合同确认依据')
-    if (!active.length) errors.push('请上传客户或合同确认依据')
-    return errors
-  }
-  if (
-    !active.some(
-      (f) => f.category === 'evidence' && f.mimeType?.startsWith('image/'),
-    )
-  )
-    errors.push('请上传本阶段照片或截图，至少保留一张未归档的现场依据图片')
-  for (const f of lifecycleDefinitions[record.kind].fields)
-    if (!fields[f.key]) errors.push(`请填写${f.label}`)
-  if (
-    ['fail', 'continue'].includes(record.result) &&
-    (!fields.nextAction || !fields.followUpDate)
-  )
-    errors.push('未通过或继续跟踪时，须填写后续措施与下次跟进日期')
-  if (
-    fields.followUpDate &&
-    record.performedDate &&
-    fields.followUpDate < record.performedDate
-  )
-    errors.push('下次跟进日期不能早于实际记录日期')
-  if (record.kind === 'test') {
-    if (!measurements.length) errors.push('至少记录一个实际试验测项')
-    if (
-      measurements.some(
-        (m) =>
-          !m.item ||
-          !m.requirement ||
-          !m.measured ||
-          !['pass', 'fail'].includes(m.verdict),
-      )
-    )
-      errors.push('每个测项须填写名称、判定要求、实测结果和判定')
-    const reports = active.filter((f) => f.category === 'report')
-    if (!reports.length) errors.push('请上传已填写分析和结论的试验报告')
-    if (
-      record.result === 'pass' &&
-      (measurements.some((m) => m.verdict !== 'pass') ||
-        reports.some((f) => f.conclusion !== 'pass'))
-    )
-      errors.push('存在未通过的测项或报告，不能给出通过结论')
-  }
-  if (record.kind === 'trial' && !active.length)
-    errors.push('请上传客户反馈或确认依据')
+  // Records are optional notes. Only their own minimal fields are validated;
+  // neither record conclusions nor attachments participate in stage advancement.
+  const errors: string[] = []
+  if (!record.performedDate) errors.push('请填写记录日期')
+  else if (record.performedDate > today()) errors.push('记录日期不能在未来')
+  if (!record.data.fields.summary?.trim()) errors.push('请填写记录内容')
   return errors
 }
 
@@ -450,18 +401,13 @@ export function lifecycleSummary(
     }))
     .filter((r) => !!r.date)
     .sort((a, b) => a.date!.localeCompare(b.date!))
-  const current = latest.get(stage as LifecycleKind)
   return {
-    pendingCount: pending.length + (!current ? 1 : 0),
+    pendingCount: pending.length,
     overdueCount: dates.filter((r) => r.date! < day).length,
     failedCount: [...latest.values()].filter(
       (r) => r.status === 'submitted' && r.result === 'fail',
     ).length,
     nextDate: dates[0]?.date || '',
-    nextLabel:
-      dates[0]?.label ||
-      (!current && lifecycleDefinitions[stage as LifecycleKind]
-        ? lifecycleDefinitions[stage as LifecycleKind].label
-        : ''),
+    nextLabel: dates[0]?.label || '',
   }
 }

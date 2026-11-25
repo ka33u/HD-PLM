@@ -10,7 +10,7 @@ function render(p,T,c){const s=p.addSlide();s.background={color:T.bg};const dark
  if(c.type==='cover'){
   text(s,'HD-PLM  /  质量部',.55,.5,8,.3,12,T.light,true);text(s,c.title,.55,1.12,8.9,.75,36,'FFFFFF',true);text(s,c.subtitle,.55,2.04,8.8,.4,18,'B7DBD2');
   rect(s,p,.55,2.9,4.15,1.8,'183F4B');text(s,'质量岗位',.8,3.14,3.5,.4,24,'FFFFFF',true);text(s,'检验事实  →  照片与报告\n异常处置  →  复验留档',.8,3.74,3.5,.65,16,'DBECE7');
-  image(s,p,c.image,5.1,2.7,4.35,2.3);text(s,'适用 HD-PLM 4.3.0  ·  2026.11',.55,5.02,7,.25,11,'B7DBD2');
+  image(s,p,c.image,5.1,2.7,4.35,2.3);text(s,'适用 HD-PLM 4.4.0  ·  2026.11',.55,5.02,7,.25,11,'B7DBD2');
  }else if(c.type==='summary'){
   text(s,c.title,.55,.6,8.8,.6,30,'FFFFFF',true);c.points.forEach((t,i)=>{circle(s,p,String(i+1),.6,1.65+i*.72,T.accent);text(s,t,1.12,1.6+i*.72,8.15,.5,17,'FFFFFF')});text(s,c.tip,.6,4.8,8.3,.45,14,'B7DBD2');
  }else{
@@ -32,7 +32,7 @@ function render(p,T,c){const s=p.addSlide();s.background={color:T.bg};const dark
   }
   if(c.tip)text(s,c.tip,.55,4.92,8.35,.4,11,T.accent);
  }
- if(c.type!=='cover'){circle(s,p,String(c.index),9.25,5.12,T.accent);if(c.type!=='summary')text(s,'质量部 SOP · HD-PLM 4.3.0 · 界面为演示数据',.55,5.37,8.2,.16,8,'73877E')}
+ if(c.type!=='cover'){circle(s,p,String(c.index),9.25,5.12,T.accent);if(c.type!=='summary')text(s,'质量部 SOP · HD-PLM 4.4.0 · 界面为演示数据',.55,5.37,8.2,.16,8,'73877E')}
  s.addNotes([c.title,c.tip||'',...(c.points||[]).map(x=>Array.isArray(x)?x.join(' '):x)].join('\n'));return s;
 }
 module.exports={render};

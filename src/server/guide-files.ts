@@ -55,7 +55,7 @@ export function sopDownload(id: string, format: string) {
     throw new NpiError('DOCUMENT_NOT_FOUND', '不支持此文件格式', 404)
   return documentResponse(
     `sop/${guide.id}.${format}`,
-    `${guide.department}软件操作SOP.${format}`,
+    `${guide.title.replaceAll(' ', '')}.${format}`,
     format === 'pdf'
       ? 'application/pdf'
       : 'application/vnd.openxmlformats-officedocument.presentationml.presentation',

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { NpiMotorOrderFields } from './NpiMotorTypes'
 import { projectTitle } from '../../lib/npi/project-identity'
+import {
+  isManufacturingOwner,
+  manufacturingOwnerHint,
+} from '../../lib/npi/manufacturing-owner'
 import { requestId as createRequestId } from '../../lib/request-id'
 import { useState } from 'react'
 import { orderFields, profileFields } from '../../lib/npi/project-profile'
@@ -97,31 +101,39 @@ export function NpiProjectInheritance({
     role: string,
     defaultId: string,
     required = true,
-  ) => (
-    <label>
-      {label}
-      <select
-        name={key}
-        aria-label={label}
-        defaultValue={value(key, defaultId)}
-        required={required}
-      >
-        <option value="">请选择</option>
-        {meta.users
-          .filter(
-            (u) =>
-              u.role === role ||
-              u.role === 'admin' ||
-              (u.id === meta.actor.id && meta.actor.role === 'admin'),
-          )
-          .map((u) => (
+  ) => {
+    const options = meta.users.filter((u) =>
+      role === 'manufacturing'
+        ? isManufacturingOwner(u)
+        : u.role === role || u.role === 'admin',
+    )
+    const selected = value(key, defaultId)
+    return (
+      <label>
+        {label}
+        <select
+          name={key}
+          aria-label={label}
+          defaultValue={options.some((u) => u.id === selected) ? selected : ''}
+          required={required}
+        >
+          <option value="">请选择</option>
+          {options.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name || u.email}
+              {u.departmentName ? ` · ${u.departmentName}` : ''}
             </option>
           ))}
-      </select>
-    </label>
-  )
+        </select>
+        {role === 'manufacturing' && (
+          <small>
+            {manufacturingOwnerHint}
+            {!options.length && ' 当前无可选人员，请先开通并分配制造类部门。'}
+          </small>
+        )}
+      </label>
+    )
+  }
   return (
     <>
       <button className="npi-button secondary" onClick={edit}>
