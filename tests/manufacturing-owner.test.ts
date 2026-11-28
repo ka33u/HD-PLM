@@ -23,7 +23,6 @@ const original = await f.db
 const departmentId = original[0]!.departmentId!
 const bad: Array<{ id: string; status: number }> = []
 for (const [key, active, department] of [
-  ['noDepartment', true, null],
   ['wrongDepartment', true, wrongDepartment!.id],
   ['inactive', false, departmentId],
 ] as const) {
@@ -54,6 +53,24 @@ await f.db
   .update(f.s.npiUserRoles)
   .set({ departmentId })
   .where(eq(f.s.npiUserRoles.userId, f.actors.admin!.id))
+const { app } = await import('../src/server/app')
+const createdAccount = await app.request('http://localhost:3490/api/accounts', {
+  method: 'POST',
+  headers: {
+    cookie: 'session=' + f.actors.admin!.token,
+    origin: 'http://localhost:3490',
+    'x-npi-actor': f.actors.admin!.id,
+    'content-type': 'application/json',
+  },
+  body: JSON.stringify({
+    name: '新建制造账号',
+    email: crypto.randomUUID() + '@owner.test.invalid',
+    password: 'Test-' + crypto.randomUUID(),
+    role: 'manufacturing',
+  }),
+})
+assert.equal(createdAccount.status, 201)
+const ungroupedOwner = (await createdAccount.json()).id as string
 const fields = {
   motorType: '三相异步电动机',
   motorModel: '制造职责验证',
@@ -73,7 +90,7 @@ let projectId = '',
   browser: Awaited<ReturnType<typeof chromium.launch>> | undefined,
   server: ReturnType<typeof spawn> | undefined
 try {
-  await test('only active manufacturing members of manufacturing departments may own projects, including when an admin submits', async () => {
+  await test('only active manufacturing accounts with compatible department mappings may own projects, including when an admin submits', async () => {
     const before = await state()
     for (const actor of ['admin', 'technical'])
       for (const person of bad) {
@@ -85,7 +102,7 @@ try {
           person.status,
         )
         if (person.status === 422)
-          assert.match(result.error, /制造类部门.*管理员不可担任/)
+          assert.match(result.error, /制造.*管理员不可担任/)
       }
     assert.deepEqual(await state(), before)
     const meta = await f.call('admin', '/meta')
@@ -94,14 +111,83 @@ try {
         .filter(isManufacturingOwner)
         .map((u: any) => u.id)
         .sort(),
-      ['manufacturing', 'peer', 'nextMfg']
-        .map((key) => f.actors[key]!.id)
-        .sort(),
+      [
+        ...['manufacturing', 'peer', 'nextMfg'].map((key) => f.actors[key]!.id),
+        ungroupedOwner,
+      ].sort(),
     )
     projectId = (await f.call('admin', '/projects', 'POST', fields, 201)).id
     assert.equal(
       (await f.detail(projectId)).manufacturingOwnerId,
       fields.manufacturingOwnerId,
+    )
+  })
+  await test('admin-created manufacturing accounts without a collaboration group can create, edit and inherit projects without gaining peer access', async () => {
+    const [mapping] = await f.db
+      .select()
+      .from(f.s.npiUserRoles)
+      .where(eq(f.s.npiUserRoles.userId, ungroupedOwner))
+    assert.equal(mapping!.departmentId, null)
+    const meta = await f.call('admin', '/meta')
+    assert(
+      isManufacturingOwner(
+        meta.users.find((u: any) => u.id === ungroupedOwner),
+      ),
+    )
+    const body = { ...fields, manufacturingOwnerId: ungroupedOwner }
+    const created = await f.call('admin', '/projects', 'POST', body, 201)
+    const detail = await f.detail(created.id)
+    const { getActor } = await import('../src/lib/npi/service')
+    const actor = await getActor(ungroupedOwner)
+    assert.deepEqual(actor.collaboratorIds, [])
+    assert.equal(actor.departmentId, null)
+    const changeBody = {
+      ...body,
+      expectedVersion: detail.version,
+      reason: '无分组制造账号仍可维护项目计划',
+      motorModel: '修订型号',
+    }
+    const change = await f.call(
+      'admin',
+      `/projects/${created.id}/change-preview`,
+      'POST',
+      changeBody,
+    )
+    await f.call('admin', `/projects/${created.id}/plan`, 'PATCH', {
+      ...changeBody,
+      expectedSnapshot: change.expectedSnapshot,
+    })
+    const inheritBody = {
+      ...body,
+      code: 'UNGROUPED-' + crypto.randomUUID().slice(0, 8),
+      copyBom: false,
+      copyExternal: false,
+    }
+    const preview = await f.call(
+      'admin',
+      `/projects/${created.id}/inheritance-preview`,
+      'POST',
+      inheritBody,
+    )
+    const inherited = await f.call(
+      'admin',
+      `/projects/${created.id}/inherit`,
+      'POST',
+      { ...inheritBody, expectedSnapshot: preview.expectedSnapshot },
+      201,
+    )
+    assert.equal(
+      (await f.detail(inherited.id)).manufacturingOwnerId,
+      ungroupedOwner,
+    )
+    assert.equal(
+      (
+        await f.db
+          .select()
+          .from(f.s.npiUserRoles)
+          .where(eq(f.s.npiUserRoles.userId, ungroupedOwner))
+      )[0]!.departmentId,
+      null,
     )
   })
   await test('edit and inheritance reject invalid owners at preview and commit without changing existing data', async () => {
@@ -163,7 +249,7 @@ try {
       .where(eq(f.s.npiUserRoles.userId, f.actors.nextMfg!.id))
     await f.db
       .update(f.s.npiUserRoles)
-      .set({ departmentId: null })
+      .set({ departmentId: wrongDepartment!.id })
       .where(eq(f.s.npiUserRoles.userId, f.actors.nextMfg!.id))
     const before = await state()
     await f.call(
@@ -271,19 +357,44 @@ try {
         )
       assert.deepEqual(
         ids.sort(),
-        ['manufacturing', 'peer', 'nextMfg']
-          .map((key) => f.actors[key]!.id)
-          .sort(),
+        [
+          ...['manufacturing', 'peer', 'nextMfg'].map(
+            (key) => f.actors[key]!.id,
+          ),
+          ungroupedOwner,
+        ].sort(),
       )
       return select
     }
     await page.goto(root + '/npi?view=projects')
     await page.getByRole('button', { name: '新建新品', exact: true }).click()
-    await verify()
+    await (await verify()).selectOption(ungroupedOwner)
+    const createDialog = page.getByRole('dialog')
+    await createDialog
+      .getByLabel('电机类型', { exact: true })
+      .selectOption('三相异步电动机')
+    await createDialog.getByLabel('订单台数', { exact: true }).fill('2')
+    await createDialog
+      .getByLabel('电机型号', { exact: true })
+      .fill('无分组制造账号建项')
+    await createDialog
+      .getByLabel('技术负责人', { exact: true })
+      .selectOption(f.actors.technical!.id)
+    await createDialog
+      .getByLabel('要求齐套日期', { exact: true })
+      .fill('2026-12-10')
+    await createDialog
+      .getByLabel('样机要求日期', { exact: true })
+      .fill('2026-12-12')
     await page
       .getByRole('dialog')
-      .getByRole('button', { name: '取消', exact: true })
+      .getByRole('button', { name: '保存', exact: true })
       .click()
+    await expect(createDialog).toHaveCount(0)
+    const createdProject = (await f.call('admin', '/dashboard')).projects.find(
+      (p: any) => p.motorModel === '无分组制造账号建项',
+    )
+    assert.equal(createdProject.manufacturingOwnerId, ungroupedOwner)
     await page.goto(
       root + `/npi?view=projects&project=${projectId}&tab=overview`,
     )
@@ -335,7 +446,7 @@ try {
     )
     // When nobody qualifies, do not silently fall back to the administrator.
     await f.db.execute(
-      sql`update npi_user_roles set department_id=null where role='manufacturing'`,
+      sql`update users set active=false where id in (select user_id from npi_user_roles where role='manufacturing')`,
     )
     await page.goto(root + '/npi?view=projects')
     await page.getByRole('button', { name: '新建新品', exact: true }).click()

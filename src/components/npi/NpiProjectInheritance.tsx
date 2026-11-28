@@ -128,7 +128,7 @@ export function NpiProjectInheritance({
         {role === 'manufacturing' && (
           <small>
             {manufacturingOwnerHint}
-            {!options.length && ' 当前无可选人员，请先开通并分配制造类部门。'}
+            {!options.length && ' 当前无可选人员，请先开通生产／制造岗位账号。'}
           </small>
         )}
       </label>

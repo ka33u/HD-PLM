@@ -205,7 +205,20 @@ export async function owner(tx: Tx, id: unknown, accepted: Array<Role>) {
 }
 export async function manufacturingOwner(tx: Tx, id: unknown) {
   const person = await getActor(uuidValue(id), tx, true)
-  if (!isManufacturingOwner(person))
+  // Read the raw mapping: getActor intentionally omits invalid groups from
+  // collaboration scope, which must not make a conflicting group look absent.
+  const [membership] = await tx
+    .select({
+      departmentId: s.npiUserRoles.departmentId,
+      departmentRole: s.npiDepartments.role,
+    })
+    .from(s.npiUserRoles)
+    .leftJoin(
+      s.npiDepartments,
+      eq(s.npiDepartments.id, s.npiUserRoles.departmentId),
+    )
+    .where(eq(s.npiUserRoles.userId, person.id))
+  if (!membership || !isManufacturingOwner({ ...person, ...membership }))
     throw new NpiError('VALIDATION_ERROR', manufacturingOwnerHint)
   return person
 }

@@ -199,7 +199,7 @@ export function NpiProjectChange({
                   )}
                   {!manufacturingChoices.length && (
                     <p>
-                      当前无可选人员，请先在账号与部门中开通并分配制造类部门。
+                      当前无可选人员，请先在账号与部门中开通生产／制造岗位账号。
                     </p>
                   )}
                   <div className="npi-form-grid">

@@ -624,7 +624,7 @@ export function NpiWorkspace() {
       key === 'manufacturingOwnerId'
         ? (meta?.users ?? []).filter(isManufacturingOwner).map((u) => ({
             value: u.id,
-            label: `${u.name || u.email} · ${u.departmentName}`,
+            label: `${u.name || u.email} · ${u.departmentName || '生产／制造'}`,
           }))
         : people(roles),
     value,
@@ -638,7 +638,7 @@ export function NpiWorkspace() {
         manufacturingOwnerHint +
         ((meta?.users ?? []).some(isManufacturingOwner)
           ? ''
-          : ' 当前无可选人员，请先在账号与部门中开通并分配制造类部门。'),
+          : ' 当前无可选人员，请先在账号与部门中开通生产／制造岗位账号。'),
       path: '/projects',
       fields: [
         {
